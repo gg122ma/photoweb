@@ -431,6 +431,8 @@ const CLOUD_NAME='das8chiyz';
 const UPLOAD_PRESET='my_photo';
 const ADMIN_EMAILS=['greencucumbertube@gmail.com'];
 const STORAGE_KEYS={shoots:'photo_gallery_shoots',slides:'photo_gallery_home_slides',users:'photo_gallery_users',session:'photo_gallery_session'};
+const LEGACY_SUPABASE_URL='https://ohxezoxiuxbqrzfomdyt.supabase.co';
+const LEGACY_SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9oeGV6b3hpdXhicXJ6Zm9tZHl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxNzIwNTEsImV4cCI6MjA5Mzc0ODA1MX0.f4XCp9NammBkHsv72a2-iSQogqw6l2qOi2rLpZk5SLQ';
 
 let SHOOTS=[],monthSet=new Set(),currentUser=null,isAdmin=false;
 let currentLang=localStorage.getItem('lang')||'zh',activeObservers=[];
@@ -538,10 +540,14 @@ function buildNavRight(){const el=document.getElementById('navRight'),th=documen
 function openCldUpload(cb,opts={}){if(typeof cloudinary==='undefined'){alert('Cloudinary not loaded');return}cloudinary.createUploadWidget({cloudName:CLOUD_NAME,uploadPreset:UPLOAD_PRESET,sources:['local','url'],multiple:!!opts.multiple,resourceType:'image',folder:'gallery',cropping:false,showAdvancedOptions:false},(err,res)=>{if(!err&&res&&res.event==='success')cb(res.info.secure_url,res.info)}).open()}
 
 /* DATA */
-function normalizeShoot(s){const date=s.date||s.shoot_date||new Date().toISOString().slice(0,10),d=new Date(date);return{slug:s.slug,id:s.id||s.slug,date,year:s.year||s.year_num||d.getFullYear(),month:s.month||s.month_num||d.getMonth()+1,title:s.title||'',description:s.description||'',people:Array.isArray(s.people)?s.people:[],equipment:s.equipment||'',drive:s.drive||s.drive_link||'',cover:s.cover||s.cover_url||DEFAULT_COVER,images:[s.cover||s.cover_url||DEFAULT_IMAGE],galleryImages:Array.isArray(s.galleryImages)?s.galleryImages:[],dateDisplay:fmtDate(date)}}
+function parseGalleryImages(value){if(Array.isArray(value))return value;if(!value)return[];try{return JSON.parse(value)}catch(e){return[]}}
+async function fetchLegacyTable(table,query){const res=await fetch(LEGACY_SUPABASE_URL+'/rest/v1/'+table+'?'+query,{headers:{apikey:LEGACY_SUPABASE_KEY,Authorization:'Bearer '+LEGACY_SUPABASE_KEY}});if(!res.ok)throw new Error('Legacy data import failed: '+table);return res.json()}
+async function importLegacyShootsIfEmpty(){const rows=readStore(STORAGE_KEYS.shoots,[]);if(rows.length)return;try{const data=await fetchLegacyTable('shoots','select=*&order=shoot_date.desc');if(!Array.isArray(data)||!data.length)return;writeStore(STORAGE_KEYS.shoots,data.map(s=>({id:s.id||s.slug,slug:s.slug,date:s.shoot_date,year:s.year_num,month:s.month_num,title:s.title||'',description:s.description||'',people:Array.isArray(s.people)?s.people:[],equipment:s.equipment||'',drive:s.drive_link||'',cover:s.cover_url||DEFAULT_COVER,galleryImages:parseGalleryImages(s.gallery_images)})))}catch(e){console.warn(e)}}
+async function importLegacySlidesIfEmpty(){const rows=readStore(STORAGE_KEYS.slides,[]);if(rows.length)return;try{const data=await fetchLegacyTable('home_slides','select=*&order=sort_order.asc');if(!Array.isArray(data)||!data.length)return;writeStore(STORAGE_KEYS.slides,data.map((s,i)=>({id:s.id||('slide-'+i),image_url:s.image_url,caption:s.caption||'',sub:s.sub||'',sort_order:s.sort_order||i})))}catch(e){console.warn(e)}}
+function normalizeShoot(s){const date=s.date||s.shoot_date||new Date().toISOString().slice(0,10),d=new Date(date);return{slug:s.slug,id:s.id||s.slug,date,year:s.year||s.year_num||d.getFullYear(),month:s.month||s.month_num||d.getMonth()+1,title:s.title||'',description:s.description||'',people:Array.isArray(s.people)?s.people:[],equipment:s.equipment||'',drive:s.drive||s.drive_link||'',cover:s.cover||s.cover_url||DEFAULT_COVER,images:[s.cover||s.cover_url||DEFAULT_IMAGE],galleryImages:parseGalleryImages(s.galleryImages||s.gallery_images),dateDisplay:fmtDate(date)}}
 function saveShoots(){writeStore(STORAGE_KEYS.shoots,SHOOTS.map(s=>({id:s.id,slug:s.slug,date:s.date,year:s.year,month:s.month,title:s.title,description:s.description,people:s.people,equipment:s.equipment,drive:s.drive,cover:s.cover,galleryImages:s.galleryImages})))}
 function loadData(){const rows=readStore(STORAGE_KEYS.shoots,[]);SHOOTS=rows.map(normalizeShoot).sort((a,b)=>new Date(b.date)-new Date(a.date));monthSet=new Set(SHOOTS.map(s=>s.year+'-'+s.month));buildNav()}
-function refreshSite(){loadData();loadHomeSlides();router()}
+async function refreshSite(){await importLegacyShootsIfEmpty();loadData();await importLegacySlidesIfEmpty();loadHomeSlides();router()}
 function shootsByMonth(y,m){return SHOOTS.filter(s=>s.year===y&&s.month===m)}
 function shootBySlug(sl){return SHOOTS.find(s=>s.slug===sl)}
 
@@ -755,3 +761,4 @@ refreshSite();
 </script>
 </body>
 </html>
+
