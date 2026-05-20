@@ -2,8 +2,49 @@ const CLOUD_NAME='das8chiyz';
 const UPLOAD_PRESET='photowebsite';
 const ADMIN_EMAILS=['greencucumbertube@gmail.com'];
 const STORAGE_KEYS={shoots:'photo_gallery_shoots',slides:'photo_gallery_home_slides',users:'photo_gallery_users',session:'photo_gallery_session'};
-const LEGACY_SUPABASE_URL='https://ohxezoxiuxbqrzfomdyt.supabase.co';
-const LEGACY_SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9oeGV6b3hpdXhicXJ6Zm9tZHl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxNzIwNTEsImV4cCI6MjA5Mzc0ODA1MX0.f4XCp9NammBkHsv72a2-iSQogqw6l2qOi2rLpZk5SLQ';
+
+/* ── SUPABASE CONFIG ─────────────────────────────────────────────── */
+const SUPABASE_URL='https://ohxezoxiuxbqrzfomdyt.supabase.co';
+const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9oeGV6b3hpdXhicXJ6Zm9tZHl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxNzIwNTEsImV4cCI6MjA5Mzc0ODA1MX0.f4XCp9NammBkHsv72a2-iSQogqw6l2qOi2rLpZk5SLQ';
+const SB_HEADERS={apikey:SUPABASE_KEY,Authorization:'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'};
+
+async function sbGet(table,query=''){
+    const res=await fetch(SUPABASE_URL+'/rest/v1/'+table+'?'+query,{headers:{apikey:SUPABASE_KEY,Authorization:'Bearer '+SUPABASE_KEY}});
+    if(!res.ok)throw new Error('Supabase GET failed: '+table+' '+res.status);
+    return res.json();
+}
+async function sbUpsert(table,data){
+    const res=await fetch(SUPABASE_URL+'/rest/v1/'+table,{
+        method:'POST',
+        headers:{...SB_HEADERS,'Prefer':'resolution=merge-duplicates'},
+        body:JSON.stringify(Array.isArray(data)?data:[data])
+    });
+    if(!res.ok){const t=await res.text();throw new Error('Supabase UPSERT failed: '+table+' '+res.status+' '+t);}
+}
+async function sbDelete(table,filter){
+    const res=await fetch(SUPABASE_URL+'/rest/v1/'+table+'?'+filter,{
+        method:'DELETE',
+        headers:{apikey:SUPABASE_KEY,Authorization:'Bearer '+SUPABASE_KEY}
+    });
+    if(!res.ok)throw new Error('Supabase DELETE failed: '+table+' '+res.status);
+}
+
+/* ── CLOUDINARY URL OPTIMIZER ────────────────────────────────────── */
+// Inject f_auto,q_auto,w_1200 into Cloudinary URLs to save bandwidth
+function optimizeCldUrl(url, opts){
+    if(!url||typeof url!=='string')return url;
+    if(!url.includes('res.cloudinary.com'))return url;
+    const {w=1200,q='auto',f='auto'}=opts||{};
+    const transform='f_'+f+',q_'+q+',w_'+w;
+    // Already has this transform → skip
+    if(url.includes(transform))return url;
+    // Insert after /image/upload/ (or /video/upload/)
+    return url.replace(/(\/image\/upload\/|\/video\/upload\/)/,'$1'+transform+'/');
+}
+// Cover images (smaller thumbs)
+function cldCover(url){return optimizeCldUrl(url,{w:800,q:'auto',f:'auto'})}
+// Gallery / lightbox images
+function cldFull(url){return optimizeCldUrl(url,{w:1200,q:'auto',f:'auto'})}
 
 let SHOOTS=[],monthSet=new Set(),currentUser=null,isAdmin=false;
 let currentLang=localStorage.getItem('lang')||'zh',activeObservers=[];
@@ -92,7 +133,7 @@ if(!localStorage.getItem('theme'))applyTheme('dark');
 function toggleTheme(){applyTheme(document.documentElement.dataset.theme==='dark'?'light':'dark');buildNavRight()}
 function setLang(l){currentLang=l;localStorage.setItem('lang',l);buildNav();buildNavRight();router()}
 
-/* AUTH */
+/* AUTH — still stored locally (session only, not gallery data) */
 function readStore(key,fallback){try{return JSON.parse(localStorage.getItem(key)||JSON.stringify(fallback))}catch(e){return fallback}}
 function writeStore(key,value){localStorage.setItem(key,JSON.stringify(value))}
 function normalizeEmail(email){return String(email||'').trim().toLowerCase()}
@@ -105,12 +146,13 @@ authModal.addEventListener('click',e=>{if(e.target===authModal)authModal.classLi
 document.getElementById('authSubmit').addEventListener('click',()=>{const email=normalizeEmail(document.getElementById('authEmail').value),pass=document.getElementById('authPass').value,msg=document.getElementById('authMsg');if(!email||!pass){msg.textContent=t('pleaseLogin');msg.className='form-msg err';return}const users=readStore(STORAGE_KEYS.users,{});try{if(authMode==='register'){if(users[email])throw new Error('Account already exists');users[email]={email,password:pass,createdAt:new Date().toISOString()};writeStore(STORAGE_KEYS.users,users)}else{if(!users[email]&&ADMIN_EMAILS.includes(email)){users[email]={email,password:pass,createdAt:new Date().toISOString()};writeStore(STORAGE_KEYS.users,users)}if(!users[email]||users[email].password!==pass)throw new Error('Invalid email or password')}writeStore(STORAGE_KEYS.session,{email});checkSession();msg.textContent=authMode==='login'?t('loginOk'):t('regOk');msg.className='form-msg ok';setTimeout(()=>{authModal.classList.remove('active');router()},500)}catch(e){msg.textContent=e.message||'Error';msg.className='form-msg err'}});
 function doLogout(){localStorage.removeItem(STORAGE_KEYS.session);currentUser=null;isAdmin=false;buildNavRight();if(location.hash==='#/admin')location.hash='#/';else router()}
 
-function buildNavRight(){const el=document.getElementById('navRight'),th=document.documentElement.dataset.theme;let h='<button class="nav-btn" id="themeBtn" title="Theme">'+(th==='dark'?'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>':'<svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z"/></svg>')+'</button>';const ll={zh:'中文',en:'EN',ms:'BM'};h+='<div class="lang-dd" id="langDD"><button class="nav-btn" id="langBtn">'+ll[currentLang]+' <svg viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="lang-panel">'+Object.entries(ll).map(([k,v])=>'<button class="lang-opt'+(k===currentLang?' active':'')+'" data-lang="'+k+'">'+v+'</button>').join('')+'</div></div>';if(currentUser){h+='<button class="nav-btn user-chip" id="profileBtn" title="'+currentUser.email+'"><img class="user-avatar" src="'+currentUser.avatar+'" alt=""><span class="user-email">'+currentUser.email+'</span></button>'}else h+='<button class="nav-btn" id="loginBtn">'+t('login')+'</button>';el.innerHTML=h;document.getElementById('themeBtn').addEventListener('click',toggleTheme);const ld=document.getElementById('langDD');document.getElementById('langBtn').addEventListener('click',e=>{e.stopPropagation();ld.classList.toggle('open')});ld.querySelectorAll('.lang-opt').forEach(b=>b.addEventListener('click',()=>{setLang(b.dataset.lang);ld.classList.remove('open')}));if(!buildNavRight._bound){buildNavRight._bound=true;document.addEventListener('click',e=>{if(!e.target.closest('.lang-dd')){const ld2=document.querySelector('.lang-dd');if(ld2)ld2.classList.remove('open')};if(!e.target.closest('#profileBtn')&&!e.target.closest('#profileMenu')){const pm=document.getElementById('profileMenu');if(pm)pm.classList.remove('open')}})}
+function buildNavRight(){const el=document.getElementById('navRight'),th=document.documentElement.dataset.theme;let h='<button class="nav-btn" id="themeBtn" title="Theme">'+(th==='dark'?'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>':'<svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z"/></svg>')+'</button>';const ll={zh:'中文',en:'EN',ms:'BM'};h+='<div class="lang-dd" id="langDD"><button class="nav-btn" id="langBtn">'+ll[currentLang]+' <svg viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="lang-panel">'+Object.entries(ll).map(([k,v])=>'<button class="lang-opt'+(k===currentLang?' active':'')+'\" data-lang="'+k+'">'+v+'</button>').join('')+'</div></div>';if(currentUser){h+='<button class="nav-btn user-chip" id="profileBtn" title="'+currentUser.email+'"><img class="user-avatar" src="'+currentUser.avatar+'" alt=""><span class="user-email">'+currentUser.email+'</span></button>'}else h+='<button class="nav-btn" id="loginBtn">'+t('login')+'</button>';el.innerHTML=h;document.getElementById('themeBtn').addEventListener('click',toggleTheme);const ld=document.getElementById('langDD');document.getElementById('langBtn').addEventListener('click',e=>{e.stopPropagation();ld.classList.toggle('open')});ld.querySelectorAll('.lang-opt').forEach(b=>b.addEventListener('click',()=>{setLang(b.dataset.lang);ld.classList.remove('open')}));if(!buildNavRight._bound){buildNavRight._bound=true;document.addEventListener('click',e=>{if(!e.target.closest('.lang-dd')){const ld2=document.querySelector('.lang-dd');if(ld2)ld2.classList.remove('open')};if(!e.target.closest('#profileBtn')&&!e.target.closest('#profileMenu')){const pm=document.getElementById('profileMenu');if(pm)pm.classList.remove('open')}})
+}
 const pm=document.getElementById('profileMenu');if(pm){const adminItem=pm.querySelector('#profileMenuAdmin');if(adminItem)adminItem.style.display=isAdmin?'flex':'none'}
 if(currentUser){const pb=document.getElementById('profileBtn');if(pb)pb.addEventListener('click',e=>{e.stopPropagation();document.getElementById('profileMenu').classList.toggle('open')})}else{const lb=document.getElementById('loginBtn');if(lb)lb.addEventListener('click',()=>openAuth('login'))}
 const pmMe=document.getElementById('profileMenuMe');if(pmMe)pmMe.onclick=()=>{document.getElementById('profileMenu').classList.remove('open');openProfilePage()};const pmAdmin=document.getElementById('profileMenuAdmin');if(pmAdmin)pmAdmin.onclick=()=>{document.getElementById('profileMenu').classList.remove('open');openNewAdminPanel()};updateAdminFab()}
 
-/* CLOUDINARY — direct unsigned upload via hidden file input */
+/* ── CLOUDINARY — direct unsigned upload ─────────────────────────── */
 function openCldUpload(cb, opts={}) {
     const input = document.createElement('input');
     input.type = 'file';
@@ -136,7 +178,11 @@ function openCldUpload(cb, opts={}) {
                 );
                 if (!res.ok) throw new Error('Upload failed: ' + res.status);
                 const data = await res.json();
-                if (data.secure_url) cb(data.secure_url, data);
+                if (data.secure_url) {
+                    // Always pass back the optimized URL
+                    const optimizedUrl = optimizeCldUrl(data.secure_url, {w:1200,q:'auto',f:'auto'});
+                    cb(optimizedUrl, data);
+                }
             } catch (e) {
                 console.error('Cloudinary upload error:', e);
                 alert('图片上传失败，请检查网络或 Cloudinary 配置。\n' + e.message);
@@ -151,11 +197,9 @@ function openCldUpload(cb, opts={}) {
     input.click();
 }
 
-/* DATA */
+/* ── DATA HELPERS ────────────────────────────────────────────────── */
 function parseGalleryImages(value){if(Array.isArray(value))return value;if(!value)return[];try{return JSON.parse(value)}catch(e){return[]}}
-async function fetchLegacyTable(table,query){const res=await fetch(LEGACY_SUPABASE_URL+'/rest/v1/'+table+'?'+query,{headers:{apikey:LEGACY_SUPABASE_KEY,Authorization:'Bearer '+LEGACY_SUPABASE_KEY}});if(!res.ok)throw new Error('Legacy data import failed: '+table);return res.json()}
-async function importLegacyShootsIfEmpty(){const rows=readStore(STORAGE_KEYS.shoots,[]);if(rows.length)return;try{const data=await fetchLegacyTable('shoots','select=*&order=shoot_date.desc');if(!Array.isArray(data)||!data.length)return;writeStore(STORAGE_KEYS.shoots,data.map(s=>({id:s.id||s.slug,slug:s.slug,date:s.shoot_date,year:s.year_num,month:s.month_num,title:s.title||'',description:s.description||'',people:Array.isArray(s.people)?s.people:[],equipment:s.equipment||'',drive:s.drive_link||'',cover:s.cover_url||DEFAULT_COVER,galleryImages:parseGalleryImages(s.gallery_images)})))}catch(e){console.warn(e)}}
-// 判断 URL 是否是无效占位符
+
 function isValidImageUrl(url){
     if(!url||typeof url!=='string')return false;
     if(url.includes('your-bucket.supabase.co'))return false;
@@ -164,17 +208,156 @@ function isValidImageUrl(url){
     if(url.length<10)return false;
     return true;
 }
-async function importLegacySlidesIfEmpty(){const rows=readStore(STORAGE_KEYS.slides,[]);if(rows.length)return;try{const data=await fetchLegacyTable('home_slides','select=*&order=sort_order.asc');if(!Array.isArray(data)||!data.length)return;const valid=data.filter(s=>isValidImageUrl(s.image_url));if(!valid.length)return;writeStore(STORAGE_KEYS.slides,valid.map((s,i)=>({id:s.id||('slide-'+i),image_url:s.image_url,caption:s.caption||'',sub:s.sub||'',sort_order:s.sort_order||i})))}catch(e){console.warn(e)}}
-function normalizeShoot(s){const date=s.date||s.shoot_date||new Date().toISOString().slice(0,10),d=new Date(date);return{slug:s.slug,id:s.id||s.slug,date,year:s.year||s.year_num||d.getFullYear(),month:s.month||s.month_num||d.getMonth()+1,title:s.title||'',description:s.description||'',people:Array.isArray(s.people)?s.people:[],equipment:s.equipment||'',drive:s.drive||s.drive_link||'',cover:s.cover||s.cover_url||DEFAULT_COVER,images:[s.cover||s.cover_url||DEFAULT_IMAGE],galleryImages:parseGalleryImages(s.galleryImages||s.gallery_images),dateDisplay:fmtDate(date)}}
-function saveShoots(){writeStore(STORAGE_KEYS.shoots,SHOOTS.map(s=>({id:s.id,slug:s.slug,date:s.date,year:s.year,month:s.month,title:s.title,description:s.description,people:s.people,equipment:s.equipment,drive:s.drive,cover:s.cover,galleryImages:s.galleryImages})))}
-function loadData(){const rows=readStore(STORAGE_KEYS.shoots,[]);SHOOTS=rows.map(normalizeShoot).sort((a,b)=>new Date(a.date)-new Date(b.date));monthSet=new Set(SHOOTS.map(s=>s.year+'-'+s.month));buildNav()}
-async function refreshSite(){await importLegacyShootsIfEmpty();loadData();await importLegacySlidesIfEmpty();loadHomeSlides();router()}
+
+function normalizeShoot(s){
+    const date=s.date||s.shoot_date||new Date().toISOString().slice(0,10),d=new Date(date);
+    return{
+        slug:s.slug,id:s.id||s.slug,date,
+        year:s.year||s.year_num||d.getFullYear(),
+        month:s.month||s.month_num||d.getMonth()+1,
+        title:s.title||'',description:s.description||'',
+        people:Array.isArray(s.people)?s.people:[],
+        equipment:s.equipment||'',drive:s.drive||s.drive_link||'',
+        cover:cldCover(s.cover||s.cover_url||DEFAULT_COVER),
+        images:[cldFull(s.cover||s.cover_url||DEFAULT_IMAGE)],
+        galleryImages:parseGalleryImages(s.galleryImages||s.gallery_images).map(u=>cldFull(u)),
+        dateDisplay:fmtDate(date)
+    }
+}
+
+/* ── SUPABASE SYNC ───────────────────────────────────────────────── */
+
+// Convert local shoot shape → Supabase shoots row shape
+function shootToSbRow(s){
+    return{
+        id:s.id||s.slug,
+        slug:s.slug,
+        shoot_date:s.date,
+        year_num:s.year,
+        month_num:s.month,
+        title:s.title||'',
+        description:s.description||'',
+        people:s.people||[],
+        equipment:s.equipment||'',
+        drive_link:s.drive||'',
+        cover_url:s.cover||DEFAULT_COVER,
+        gallery_images:JSON.stringify(s.galleryImages||[])
+    };
+}
+
+// Convert Supabase row → local shoot shape
+function sbRowToShoot(r){
+    return normalizeShoot({
+        id:r.id||r.slug,slug:r.slug,date:r.shoot_date,
+        year_num:r.year_num,month_num:r.month_num,
+        title:r.title,description:r.description,
+        people:Array.isArray(r.people)?r.people:[],
+        equipment:r.equipment,drive_link:r.drive_link,
+        cover_url:r.cover_url,gallery_images:r.gallery_images
+    });
+}
+
+// Convert local slide → Supabase home_slides row
+function slideToSbRow(s,i){
+    return{
+        id:s.id||('slide-'+i),
+        image_url:s.image_url,
+        caption:s.caption||'',
+        sub:s.sub||'',
+        sort_order:s.sort_order!==undefined?s.sort_order:i
+    };
+}
+
+// Push any shoots/slides from localStorage to Supabase (one-time migration)
+async function migrateLocalDataToSupabase(){
+    try{
+        const localShoots=readStore(STORAGE_KEYS.shoots,[]);
+        if(localShoots.length){
+            console.log('[migrate] pushing',localShoots.length,'local shoots to Supabase…');
+            await sbUpsert('shoots',localShoots.map(s=>shootToSbRow(normalizeShoot(s))));
+            localStorage.removeItem(STORAGE_KEYS.shoots);
+            console.log('[migrate] shoots done');
+        }
+        const localSlides=readStore(STORAGE_KEYS.slides,[]).filter(s=>isValidImageUrl(s.image_url));
+        if(localSlides.length){
+            console.log('[migrate] pushing',localSlides.length,'local slides to Supabase…');
+            await sbUpsert('home_slides',localSlides.map(slideToSbRow));
+            localStorage.removeItem(STORAGE_KEYS.slides);
+            console.log('[migrate] slides done');
+        }
+    }catch(e){
+        console.warn('[migrate] migration error (will still load from Supabase):',e);
+    }
+}
+
+// Load shoots from Supabase into SHOOTS[]
+async function loadShootsFromSupabase(){
+    const rows=await sbGet('shoots','select=*&order=shoot_date.desc');
+    SHOOTS=rows.map(sbRowToShoot).sort((a,b)=>new Date(a.date)-new Date(b.date));
+    monthSet=new Set(SHOOTS.map(s=>s.year+'-'+s.month));
+    buildNav();
+}
+
+// Save a single shoot to Supabase
+async function saveShootToSupabase(shoot){
+    await sbUpsert('shoots',[shootToSbRow(shoot)]);
+}
+
+// Delete a shoot from Supabase
+async function deleteShootFromSupabase(slug){
+    await sbDelete('shoots','slug=eq.'+encodeURIComponent(slug));
+}
+
+// In-memory SHOOTS list helpers (kept for compatibility)
+function saveShoots(){
+    // Persist all current SHOOTS to Supabase
+    return sbUpsert('shoots',SHOOTS.map(s=>shootToSbRow(s))).catch(e=>console.error('saveShoots error',e));
+}
+
+/* ── HOME SLIDES ─────────────────────────────────────────────────── */
+let HOME_SLIDES=[];
+
+async function loadSlidesFromSupabase(){
+    const rows=await sbGet('home_slides','select=*&order=sort_order.asc');
+    HOME_SLIDES=rows.filter(s=>isValidImageUrl(s.image_url)).map(s=>({
+        id:s.id,
+        image_url:cldFull(s.image_url),
+        caption:s.caption||'',
+        sub:s.sub||'',
+        sort_order:s.sort_order
+    }));
+    if(!HOME_SLIDES.length){
+        HOME_SLIDES=SHOOTS.slice(0,5).map(s=>({id:'slide-'+s.slug,image_url:s.cover,caption:s.title,sub:''}));
+    }
+}
+
+async function saveSlidesToSupabase(){
+    // Delete all, then re-insert with updated sort_order
+    try{
+        await sbDelete('home_slides','id=neq.___none___');
+    }catch(e){/* ignore if table empty */}
+    if(HOME_SLIDES.length){
+        await sbUpsert('home_slides',HOME_SLIDES.map(slideToSbRow));
+    }
+}
+
+function saveHomeSlides(){return saveSlidesToSupabase().catch(e=>console.error('saveHomeSlides error',e))}
+
+/* ── INIT & REFRESH ──────────────────────────────────────────────── */
+async function refreshSite(){
+    // 1. Migrate any localStorage data to Supabase first (one-time)
+    await migrateLocalDataToSupabase();
+    // 2. Load fresh data from Supabase
+    await loadShootsFromSupabase();
+    await loadSlidesFromSupabase();
+    router();
+}
+
 function shootsByMonth(y,m){return SHOOTS.filter(s=>s.year===y&&s.month===m)}
 function shootBySlug(sl){return SHOOTS.find(s=>s.slug===sl)}
 
 /* NAV */
-function buildNav(){const c=document.getElementById('navCenter');c.innerHTML=YEARS.map(y=>'<div class="nav-dd" data-year="'+y+'"><button class="nav-trigger">'+y+' <svg viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="dd-panel">'+[1,2,3,4,5,6,7,8,9,10,11,12].map(m=>{const has=monthSet.has(y+'-'+m);return'<button class="dd-month'+(has?' has-data':'')+'" data-year="'+y+'" data-month="'+m+'">'+mName(m)+'</button>'}).join('')+'</div></div>').join('');c.querySelectorAll('.nav-dd').forEach(dd=>{let tm;dd.addEventListener('mouseenter',()=>{clearTimeout(tm);dd.classList.add('open')});dd.addEventListener('mouseleave',()=>{tm=setTimeout(()=>dd.classList.remove('open'),180)});dd.querySelector('.nav-trigger').addEventListener('click',e=>{e.preventDefault();const w=dd.classList.contains('open');c.querySelectorAll('.nav-dd').forEach(d=>d.classList.remove('open'));if(!w)dd.classList.add('open')})});c.querySelectorAll('.dd-month.has-data').forEach(btn=>btn.addEventListener('click',()=>{c.querySelectorAll('.nav-dd').forEach(d=>d.classList.remove('open'));location.hash='#/month/'+btn.dataset.year+'/'+btn.dataset.month}));if(!buildNav._bound){buildNav._bound=true;document.addEventListener('click',e=>{if(!e.target.closest('.nav-dd')){const c2=document.getElementById('navCenter');if(c2)c2.querySelectorAll('.nav-dd').forEach(d=>d.classList.remove('open'))}})}
-}
+function buildNav(){const c=document.getElementById('navCenter');c.innerHTML=YEARS.map(y=>'<div class="nav-dd" data-year="'+y+'"><button class="nav-trigger">'+y+' <svg viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="dd-panel">'+[1,2,3,4,5,6,7,8,9,10,11,12].map(m=>{const has=monthSet.has(y+'-'+m);return'<button class="dd-month'+(has?' has-data':'')+'\" data-year="'+y+'" data-month="'+m+'">'+mName(m)+'</button>'}).join('')+'</div></div>').join('');c.querySelectorAll('.nav-dd').forEach(dd=>{let tm;dd.addEventListener('mouseenter',()=>{clearTimeout(tm);dd.classList.add('open')});dd.addEventListener('mouseleave',()=>{tm=setTimeout(()=>dd.classList.remove('open'),180)});dd.querySelector('.nav-trigger').addEventListener('click',e=>{e.preventDefault();const w=dd.classList.contains('open');c.querySelectorAll('.nav-dd').forEach(d=>d.classList.remove('open'));if(!w)dd.classList.add('open')})});c.querySelectorAll('.dd-month.has-data').forEach(btn=>btn.addEventListener('click',()=>{c.querySelectorAll('.nav-dd').forEach(d=>d.classList.remove('open'));location.hash='#/month/'+btn.dataset.year+'/'+btn.dataset.month}));if(!buildNav._bound){buildNav._bound=true;document.addEventListener('click',e=>{if(!e.target.closest('.nav-dd')){const c2=document.getElementById('navCenter');if(c2)c2.querySelectorAll('.nav-dd').forEach(d=>d.classList.remove('open'))}})}}
 
 /* LIGHTBOX */
 let lbImgs=[],lbIdx=0;
@@ -192,22 +375,12 @@ function router(){activeObservers.forEach(o=>o.disconnect());activeObservers=[];
 window.addEventListener('hashchange',router);
 
 /* HOME SLIDER */
-let HOME_SLIDES=[];
-function saveHomeSlides(){writeStore(STORAGE_KEYS.slides,HOME_SLIDES)}
-function loadHomeSlides(){
-    const rows=readStore(STORAGE_KEYS.slides,[]);
-    // 过滤掉 your-bucket 等无效占位符 URL
-    const validRows=rows.filter(s=>isValidImageUrl(s.image_url));
-    if(validRows.length!==rows.length)writeStore(STORAGE_KEYS.slides,validRows); // 顺便清理存储
-    HOME_SLIDES=validRows.length?validRows:SHOOTS.slice(0,5).map(s=>({id:'slide-'+s.slug,image_url:s.cover,caption:s.title,sub:''}));
-}
-
 let sliderIdx=0,sliderTouchX=0;
 function renderHome(){
     const slides=HOME_SLIDES.length?HOME_SLIDES:SHOOTS.slice(0,5).map(s=>({image_url:s.cover,caption:s.title,sub:''}));
     if(!slides.length){app.innerHTML='<div class="empty" style="padding-top:200px"><p>'+t('noData')+'</p></div>';return}
-    const slideHTML=slides.map((s,i)=>'<div class="slider-slide'+(i===0?' active':'')+'" data-index="'+i+'"><img class="slide-bg" src="'+s.image_url+'" alt="'+s.caption+'" draggable="false"><div class="slider-overlay"></div><div class="slider-content"><h1 class="slider-title">'+s.caption+'</h1><p class="slider-meta">'+s.sub+'</p></div></div>').join('');
-    const dots=slides.map((_,i)=>'<button class="slider-dot'+(i===0?' active':'')+'" data-index="'+i+'"></button>').join('');
+    const slideHTML=slides.map((s,i)=>'<div class="slider-slide'+(i===0?' active':'')+'\" data-index="'+i+'"><img class="slide-bg" src="'+s.image_url+'" alt="'+s.caption+'" draggable="false"><div class="slider-overlay"></div><div class="slider-content"><h1 class="slider-title">'+s.caption+'</h1><p class="slider-meta">'+s.sub+'</p></div></div>').join('');
+    const dots=slides.map((_,i)=>'<button class="slider-dot'+(i===0?' active':'')+'\" data-index="'+i+'"></button>').join('');
     app.innerHTML='<div class="home-slider" id="homeSlider"><div class="slider-progress" id="sliderProgress"></div>'+slideHTML+'<div class="slider-dots">'+dots+'</div><div class="slider-hint">SCROLL ↓</div></div><div class="home-disclaimer">如果发现照片有点怪，那只表明该相册还未整理</div>';
     const sliderEl=document.getElementById('homeSlider');
     const slideEls=sliderEl.querySelectorAll('.slider-slide');
@@ -238,7 +411,7 @@ document.body.appendChild(detOverlay);
 
 function openDet(shoot){
     document.getElementById('detCat').textContent=shoot.equipment||'';
-    document.getElementById('detHeroImg').src=shoot.cover||DEFAULT_IMAGE;
+    document.getElementById('detHeroImg').src=cldFull(shoot.cover)||DEFAULT_IMAGE;
     document.getElementById('detHeroImg').alt=shoot.title;
     document.getElementById('detName').textContent=shoot.title;
     document.getElementById('detZh').textContent=shoot.dateDisplay;
@@ -248,7 +421,7 @@ function openDet(shoot){
     const driveBtn=document.getElementById('detDriveBtn');
     if(shoot.drive){driveBtn.href=shoot.drive;driveBtn.style.display=''}else driveBtn.style.display='none';
     const gal=document.getElementById('detGallery');
-    const gi=shoot.galleryImages||[];
+    const gi=(shoot.galleryImages||[]).map(u=>cldFull(u));
     if(gi.length){
         gal.innerHTML='<div class="det-gallery-head"><h3>'+t('galleryTitle')+'</h3><span>'+gi.length+' '+t('photos')+'</span></div><div class="det-gallery-grid">'+gi.map((url,i)=>'<div class="det-gal-item" data-idx="'+i+'"><img src="'+url+'" alt="" loading="lazy"></div>').join('')+'</div>';
         requestAnimationFrame(()=>{
@@ -260,47 +433,29 @@ function openDet(shoot){
     }
     detOverlay.classList.add('open');document.body.style.overflow='hidden';
 
-    // 添加"下滑查看更多"提示
-    const existingHint = document.getElementById('detScrollHint');
-    if (existingHint) existingHint.remove();
-    const scrollHint = document.createElement('div');
-    scrollHint.className = 'det-scroll-hint';
-    scrollHint.id = 'detScrollHint';
-    scrollHint.innerHTML = '<span class="det-scroll-hint-text">下滑查看更多</span><svg class="det-scroll-hint-arrow" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>';
+    const existingHint=document.getElementById('detScrollHint');
+    if(existingHint)existingHint.remove();
+    const scrollHint=document.createElement('div');
+    scrollHint.className='det-scroll-hint';scrollHint.id='detScrollHint';
+    scrollHint.innerHTML='<span class="det-scroll-hint-text">下滑查看更多</span><svg class="det-scroll-hint-arrow" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>';
     detOverlay.appendChild(scrollHint);
 
-    // 监听 det-body 滚动：当英雄图片完整出现（回到顶部）时隐藏提示，下滑后显示
-    const detBody = detOverlay.querySelector('.det-body');
-    const detHero = detOverlay.querySelector('.det-hero');
-    if (detBody && detHero) {
-        // 先重置到顶部
-        detBody.scrollTop = 0;
-        // 初始：顶部时隐藏提示（等动画播完再显示）
+    const detBody=detOverlay.querySelector('.det-body');
+    const detHero=detOverlay.querySelector('.det-hero');
+    if(detBody&&detHero){
+        detBody.scrollTop=0;
         scrollHint.classList.add('hidden');
-        setTimeout(() => { scrollHint.classList.remove('hidden'); }, 1200);
-
-        const onScroll = () => {
-            const heroH = detHero.offsetHeight;
-            if (detBody.scrollTop >= heroH * 0.85) {
-                // 已滑过英雄图片区域，隐藏提示
-                scrollHint.classList.add('hidden');
-            } else {
-                scrollHint.classList.remove('hidden');
-            }
-        };
-        detBody.addEventListener('scroll', onScroll);
-        // 关闭时清理
-        const origClose = detOverlay._scrollCleanup;
-        if (origClose) origClose();
-        detOverlay._scrollCleanup = () => detBody.removeEventListener('scroll', onScroll);
+        setTimeout(()=>{scrollHint.classList.remove('hidden');},1200);
+        const onScroll=()=>{const heroH=detHero.offsetHeight;if(detBody.scrollTop>=heroH*0.85){scrollHint.classList.add('hidden')}else{scrollHint.classList.remove('hidden')}};
+        detBody.addEventListener('scroll',onScroll);
+        const origClose=detOverlay._scrollCleanup;if(origClose)origClose();
+        detOverlay._scrollCleanup=()=>detBody.removeEventListener('scroll',onScroll);
     }
 }
 
-/* FIX: closeDet navigates back to parent month page to prevent black screen */
 function closeDet(){
     if(!detOverlay.classList.contains('open'))return;
-    detOverlay.classList.remove('open');
-    document.body.style.overflow='';
+    detOverlay.classList.remove('open');document.body.style.overflow='';
     if(detOverlay._scrollCleanup){detOverlay._scrollCleanup();detOverlay._scrollCleanup=null;}
     const hm=location.hash.match(/^#\/shoot\/(.+)$/);
     if(hm){const s=shootBySlug(hm[1]);location.hash=s?'#/month/'+s.year+'/'+s.month:'#/'}
@@ -326,15 +481,19 @@ function slugifyTitle(text){const base=(text||'album').toLowerCase().trim().repl
 function fillAdminAlbumSelect(){const sel=document.getElementById('adminPhotoAlbum');if(!sel)return;sel.innerHTML='<option value="__new__">新建相册</option>'+SHOOTS.map(s=>'<option value="'+s.slug+'">'+s.title+' · '+s.dateDisplay+'</option>').join('')}
 function openAdminCenter(){if(!isAdmin){openAuth('login');return}fillAdminAlbumSelect();renderAdminAlbumList();renderHomeSlidesAdmin();resetAdminUpload();document.getElementById('adminCenterErr')?.classList.remove('show');document.getElementById('adminCenterOk')?.classList.remove('show');const dateEl=document.getElementById('adminNewAlbumDate');if(dateEl&&!dateEl.value)dateEl.value=new Date().toISOString().slice(0,10);document.getElementById('adminCenter').classList.add('on');document.body.style.overflow='hidden'}
 function closeAdminCenter(){document.getElementById('adminCenter').classList.remove('on');document.body.style.overflow=''}
-function renderAdminAlbumList(){const el=document.getElementById('adminAlbumList');if(!el)return;if(!SHOOTS.length){el.innerHTML='<div class="admin-list-meta">暂无相册，先添加一张照片或新建相册。</div>';return}el.innerHTML=SHOOTS.map(s=>'<div class="admin-list-row"><img src="'+s.cover+'" alt=""><div class="admin-list-main"><div class="admin-list-title">'+s.title+'</div><div class="admin-list-meta">'+s.dateDisplay+' · '+(s.galleryImages?s.galleryImages.length:0)+' '+t('photos')+' · '+(s.equipment||'—')+'</div></div><div class="admin-list-actions"><button class="act-btn" data-album-edit="'+s.slug+'">'+t('edit')+'</button><button class="act-btn" data-album-cover="'+s.slug+'">'+t('batchCover')+'</button><button class="act-btn del" data-album-del="'+s.slug+'">'+t('delete')+'</button></div></div>').join('');el.querySelectorAll('[data-album-edit]').forEach(b=>b.addEventListener('click',()=>openEdit(shootBySlug(b.dataset.albumEdit))));el.querySelectorAll('[data-album-cover]').forEach(b=>b.addEventListener('click',()=>openCldUpload(url=>{SHOOTS=SHOOTS.map(s=>s.slug===b.dataset.albumCover?{...s,cover:url,images:[url]}:s);saveShoots();refreshSite();renderAdminAlbumList();showAdminMsg('ok','封面已更新')})));el.querySelectorAll('[data-album-del]').forEach(b=>b.addEventListener('click',()=>{if(!confirm(t('confirmDel')))return;SHOOTS=SHOOTS.filter(s=>s.slug!==b.dataset.albumDel);saveShoots();refreshSite();renderAdminAlbumList();fillAdminAlbumSelect();showAdminMsg('ok','相册已删除')}))}
-function addPendingPhotoToAlbum(){if(!adminPendingPhotoUrl){showAdminMsg('err','请先上传照片');return}const target=document.getElementById('adminPhotoAlbum').value;if(target==='__new__'){const title=document.getElementById('adminNewAlbumTitle').value.trim()||'Untitled';const date=document.getElementById('adminNewAlbumDate').value||new Date().toISOString().slice(0,10);const d=new Date(date);const slug=slugifyTitle(title);const row=normalizeShoot({id:slug,slug,title,date,year:d.getFullYear(),month:d.getMonth()+1,description:'',people:[],equipment:'',drive:'',cover:adminPendingPhotoUrl,galleryImages:[adminPendingPhotoUrl]});SHOOTS=[row,...SHOOTS]}else{SHOOTS=SHOOTS.map(s=>s.slug===target?{...s,galleryImages:[...(s.galleryImages||[]),adminPendingPhotoUrl]}:s)}saveShoots();refreshSite();fillAdminAlbumSelect();renderAdminAlbumList();resetAdminUpload();document.getElementById('adminNewAlbumTitle').value='';showAdminMsg('ok','照片已添加')}
+function renderAdminAlbumList(){const el=document.getElementById('adminAlbumList');if(!el)return;if(!SHOOTS.length){el.innerHTML='<div class="admin-list-meta">暂无相册，先添加一张照片或新建相册。</div>';return}el.innerHTML=SHOOTS.map(s=>'<div class="admin-list-row"><img src="'+s.cover+'" alt=""><div class="admin-list-main"><div class="admin-list-title">'+s.title+'</div><div class="admin-list-meta">'+s.dateDisplay+' · '+(s.galleryImages?s.galleryImages.length:0)+' '+t('photos')+' · '+(s.equipment||'—')+'</div></div><div class="admin-list-actions"><button class="act-btn" data-album-edit="'+s.slug+'">'+t('edit')+'</button><button class="act-btn" data-album-cover="'+s.slug+'">'+t('batchCover')+'</button><button class="act-btn del" data-album-del="'+s.slug+'">'+t('delete')+'</button></div></div>').join('');
+el.querySelectorAll('[data-album-edit]').forEach(b=>b.addEventListener('click',()=>openEdit(shootBySlug(b.dataset.albumEdit))));
+el.querySelectorAll('[data-album-cover]').forEach(b=>b.addEventListener('click',()=>openCldUpload(url=>{SHOOTS=SHOOTS.map(s=>s.slug===b.dataset.albumCover?{...s,cover:url,images:[url]}:s);saveShoots();refreshSite();renderAdminAlbumList();showAdminMsg('ok','封面已更新')})));
+el.querySelectorAll('[data-album-del]').forEach(b=>b.addEventListener('click',async()=>{if(!confirm(t('confirmDel')))return;await deleteShootFromSupabase(b.dataset.albumDel);SHOOTS=SHOOTS.filter(s=>s.slug!==b.dataset.albumDel);refreshSite();renderAdminAlbumList();fillAdminAlbumSelect();showAdminMsg('ok','相册已删除')}))}
+
+async function addPendingPhotoToAlbum(){if(!adminPendingPhotoUrl){showAdminMsg('err','请先上传照片');return}const target=document.getElementById('adminPhotoAlbum').value;if(target==='__new__'){const title=document.getElementById('adminNewAlbumTitle').value.trim()||'Untitled';const date=document.getElementById('adminNewAlbumDate').value||new Date().toISOString().slice(0,10);const d=new Date(date);const slug=slugifyTitle(title);const row=normalizeShoot({id:slug,slug,title,date,year:d.getFullYear(),month:d.getMonth()+1,description:'',people:[],equipment:'',drive:'',cover:adminPendingPhotoUrl,galleryImages:[adminPendingPhotoUrl]});SHOOTS=[row,...SHOOTS]}else{SHOOTS=SHOOTS.map(s=>s.slug===target?{...s,galleryImages:[...(s.galleryImages||[]),adminPendingPhotoUrl]}:s)}await saveShoots();refreshSite();fillAdminAlbumSelect();renderAdminAlbumList();resetAdminUpload();document.getElementById('adminNewAlbumTitle').value='';showAdminMsg('ok','照片已添加')}
 
 /* ADMIN */
 function renderAdmin(){if(!currentUser){app.innerHTML='<div class="empty page-enter" style="padding-top:140px"><p>'+t('pleaseLogin')+'</p></div>';return}if(!isAdmin){app.innerHTML='<div class="empty page-enter" style="padding-top:140px"><p>'+t('noPermission')+'</p></div>';return}renderHome();setTimeout(openAdminCenter,0)}
-function renderAdminRows(){const tb=document.getElementById('aTbody');tb.innerHTML=SHOOTS.map(s=>'<tr data-slug="'+s.slug+'"><td><input type="checkbox" class="a-chk" data-slug="'+s.slug+'"></td><td><img class="th" src="'+s.cover+'" alt=""></td><td>'+s.title+'</td><td style="font-family:\'DM Mono\',monospace;font-size:.7rem;color:var(--text-secondary)">'+s.dateDisplay+'</td><td style="font-size:.75rem;color:var(--text-secondary)">'+s.equipment+'</td><td style="font-size:.7rem;color:var(--text-dim)">'+(s.galleryImages?s.galleryImages.length:0)+'</td><td><div style="display:flex;gap:.5rem"><button class="act-btn" data-act="edit" data-slug="'+s.slug+'">'+t('edit')+'</button><button class="act-btn del" data-act="del" data-slug="'+s.slug+'">'+t('delete')+'</button></div></td></tr>').join('');tb.querySelectorAll('.a-chk').forEach(c=>c.addEventListener('change',updSel));tb.querySelectorAll('[data-act="edit"]').forEach(b=>b.addEventListener('click',()=>openEdit(shootBySlug(b.dataset.slug))));tb.querySelectorAll('[data-act="del"]').forEach(b=>b.addEventListener('click',()=>{if(!confirm(t('confirmDel')))return;SHOOTS=SHOOTS.filter(s=>s.slug!==b.dataset.slug);saveShoots();refreshSite()}))}
+function renderAdminRows(){const tb=document.getElementById('aTbody');tb.innerHTML=SHOOTS.map(s=>'<tr data-slug="'+s.slug+'"><td><input type="checkbox" class="a-chk" data-slug="'+s.slug+'"></td><td><img class="th" src="'+s.cover+'" alt=""></td><td>'+s.title+'</td><td style="font-family:\'DM Mono\',monospace;font-size:.7rem;color:var(--text-secondary)">'+s.dateDisplay+'</td><td style="font-size:.75rem;color:var(--text-secondary)">'+s.equipment+'</td><td style="font-size:.7rem;color:var(--text-dim)">'+(s.galleryImages?s.galleryImages.length:0)+'</td><td><div style="display:flex;gap:.5rem"><button class="act-btn" data-act="edit" data-slug="'+s.slug+'">'+t('edit')+'</button><button class="act-btn del" data-act="del" data-slug="'+s.slug+'">'+t('delete')+'</button></div></td></tr>').join('');tb.querySelectorAll('.a-chk').forEach(c=>c.addEventListener('change',updSel));tb.querySelectorAll('[data-act="edit"]').forEach(b=>b.addEventListener('click',()=>openEdit(shootBySlug(b.dataset.slug))));tb.querySelectorAll('[data-act="del"]').forEach(b=>b.addEventListener('click',async()=>{if(!confirm(t('confirmDel')))return;await deleteShootFromSupabase(b.dataset.slug);SHOOTS=SHOOTS.filter(s=>s.slug!==b.dataset.slug);refreshSite()}))}
 function getSel(){return[...document.querySelectorAll('.a-chk:checked')].map(c=>c.dataset.slug)}
 function updSel(){const n=getSel(),el=document.getElementById('selCount');if(el)el.textContent=n.length?n.length+' '+t('selected'):''}
-function batchDel(){const sl=getSel();if(!sl.length||!confirm(sl.length+' '+t('confirmDel')))return;SHOOTS=SHOOTS.filter(s=>!sl.includes(s.slug));saveShoots();refreshSite()}
+async function batchDel(){const sl=getSel();if(!sl.length||!confirm(sl.length+' '+t('confirmDel')))return;for(const slug of sl)await deleteShootFromSupabase(slug);SHOOTS=SHOOTS.filter(s=>!sl.includes(s.slug));refreshSite()}
 function batchCov(){const sl=getSel();if(!sl.length)return;openCldUpload(url=>{SHOOTS=SHOOTS.map(s=>sl.includes(s.slug)?{...s,cover:url,images:[url]}:s);saveShoots();refreshSite()})}
 
 /* HOME SLIDES ADMIN */
@@ -359,7 +518,7 @@ function openSlideEdit(idx){
     +'<div class="cover-empty" id="slideImgEmpty" style="display:'+(s?'none':'flex')+'"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/><path d="M21 15l-5-5L5 21" stroke="currentColor"/></svg>点击上传图片</div>'
     +'</div>'
     +'<div class="edit-cover-actions"><button class="upload-btn" id="slideUploadBtn"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>上传图片</button><button class="upload-btn" id="slideUrlToggle"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>粘贴链接</button></div>'
-    +'<div id="slideUrlGroup" style="display:none;margin-top:.8rem"><input class="form-input" id="slideUrlInput" placeholder="图片 URL" value="'+(s?s.image_url:'')+'"></div></div>'
+    +'<div id="slideUrlGroup" style="display:none;margin-top:.8rem"><input class="form-input" id="slideUrlInput" placeholder="图片 URL" value="'+(s?s.image_url:'')+'"</div></div>'
     +'<div class="form-group"><label class="form-label">标题文字</label><input class="form-input" id="slideCaptionInput" value="'+(s?s.caption:'')+'" placeholder="首页幻灯片标题"></div>'
     +'<div class="form-group"><label class="form-label">副标题</label><input class="form-input" id="slideSubInput" value="'+(s?s.sub:'')+'" placeholder="副标题（可选）"></div>'
     +'<div class="edit-actions">'
@@ -373,14 +532,14 @@ function openSlideEdit(idx){
     overlay.querySelector('#slideUrlToggle').addEventListener('click',()=>{const g=overlay.querySelector('#slideUrlGroup');g.style.display=g.style.display==='none'?'block':'none'});
     overlay.querySelector('#slideUrlInput').addEventListener('input',function(){currentImgUrl=this.value;overlay.querySelector('#slideImgPreview').src=this.value;overlay.querySelector('#slideImgPreview').style.display=this.value?'block':'none';overlay.querySelector('#slideImgEmpty').style.display=this.value?'none':'flex'});
     overlay.querySelector('#slideCancelBtn').addEventListener('click',()=>overlay.remove());
-    overlay.querySelector('#slideSaveBtn').addEventListener('click',()=>{
+    overlay.querySelector('#slideSaveBtn').addEventListener('click',async()=>{
         const imgUrl=currentImgUrl||overlay.querySelector('#slideUrlInput').value.trim();
         const caption=overlay.querySelector('#slideCaptionInput').value.trim();
         const sub=overlay.querySelector('#slideSubInput').value.trim();
         if(!imgUrl)return;
-        if(idx!==null)HOME_SLIDES[idx]={...HOME_SLIDES[idx],image_url:imgUrl,caption,sub};
-        else HOME_SLIDES.push({id:'slide-'+Date.now(),image_url:imgUrl,caption,sub,sort_order:HOME_SLIDES.length});
-        saveSlideOrder();
+        if(idx!==null)HOME_SLIDES[idx]={...HOME_SLIDES[idx],image_url:cldFull(imgUrl),caption,sub};
+        else HOME_SLIDES.push({id:'slide-'+Date.now(),image_url:cldFull(imgUrl),caption,sub,sort_order:HOME_SLIDES.length});
+        await saveSlideOrder();
         overlay.remove();renderHomeSlidesAdmin();router();
     });
     overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove()});
@@ -416,11 +575,7 @@ document.getElementById('editGalleryAddBtn').addEventListener('click',()=>openCl
 document.getElementById('editCancelBtn').addEventListener('click',()=>document.getElementById('editOverlay').classList.remove('active'));
 document.getElementById('editOverlay').addEventListener('click',e=>{if(e.target.id==='editOverlay')document.getElementById('editOverlay').classList.remove('active')});
 
-// Note: The original code was truncated at this point (ending with "docu").
-// The remaining event listeners and initialization code below were completed
-// based on the patterns established in the rest of the codebase:
-
-document.getElementById('editSaveBtn').addEventListener('click', () => {
+document.getElementById('editSaveBtn').addEventListener('click', async () => {
     const origSlug = document.getElementById('editOrigSlug').value;
     const slug = document.getElementById('editSlug').value.trim();
     const title = document.getElementById('editTitleInput').value.trim();
@@ -441,12 +596,15 @@ document.getElementById('editSaveBtn').addEventListener('click', () => {
     };
 
     if (origSlug) {
-        SHOOTS = SHOOTS.map(s => s.slug === origSlug ? normalizeShoot(shootData) : s);
+        const updated = normalizeShoot(shootData);
+        SHOOTS = SHOOTS.map(s => s.slug === origSlug ? updated : s);
+        await saveShootToSupabase(updated);
     } else {
         if (SHOOTS.some(s => s.slug === slug)) { alert('标识已存在'); return; }
-        SHOOTS = [normalizeShoot(shootData), ...SHOOTS];
+        const newShoot = normalizeShoot(shootData);
+        SHOOTS = [newShoot, ...SHOOTS];
+        await saveShootToSupabase(newShoot);
     }
-    saveShoots();
     document.getElementById('editOverlay').classList.remove('active');
     refreshSite();
 });
@@ -457,7 +615,6 @@ document.getElementById('adminUploadZone').addEventListener('click', () => {
     openCldUpload(url => {
         adminPendingPhotoUrl = url;
         const zone = document.getElementById('adminUploadZone');
-        const label = document.getElementById('adminUploadLabel');
         zone.classList.add('has-img');
         zone.innerHTML = '<img src="' + url + '" alt="">' +
             '<div class="admin-upload-label" id="adminUploadLabel">' +
@@ -516,7 +673,7 @@ function setNaTab(tab){document.querySelectorAll('.new-admin-tab').forEach(t=>t.
 function renderNaAlbumList(){
     const el=document.getElementById('naAlbumList');
     if(!SHOOTS.length){el.innerHTML='<div style="padding:1rem;font-family:DM Mono,monospace;font-size:.65rem;color:var(--text-dim)">暂无相册</div>';return}
-    el.innerHTML=[...SHOOTS].sort((a,b)=>new Date(a.date)-new Date(b.date)).map(s=>'<div class="na-album-item'+(naCurrentSlug===s.slug?' active':'')+'" data-slug="'+s.slug+'"><img src="'+s.cover+'" alt="" loading="lazy"><div class="na-album-item-info"><div class="na-album-item-title">'+s.dateDisplay+'</div><div class="na-album-item-meta">'+(s.galleryImages?s.galleryImages.length:0)+' 张照片</div></div></div>').join('');
+    el.innerHTML=[...SHOOTS].sort((a,b)=>new Date(a.date)-new Date(b.date)).map(s=>'<div class="na-album-item'+(naCurrentSlug===s.slug?' active':'')+'\" data-slug="'+s.slug+'"><img src="'+s.cover+'" alt="" loading="lazy"><div class="na-album-item-info"><div class="na-album-item-title">'+s.dateDisplay+'</div><div class="na-album-item-meta">'+(s.galleryImages?s.galleryImages.length:0)+' 张照片</div></div></div>').join('');
     el.querySelectorAll('.na-album-item').forEach(item=>{item.addEventListener('click',()=>selectNaAlbum(item.dataset.slug))});
 }
 function selectNaAlbum(slug){
@@ -529,7 +686,6 @@ function selectNaAlbum(slug){
     document.getElementById('naBatchDelPhotos').disabled=true;
     document.getElementById('newAdminSelInfo').textContent='已选：'+s.dateDisplay;
     document.getElementById('newAdminSelInfo').classList.add('active');
-    // Fill cover & meta
     document.getElementById('naDetailCoverImg').src=s.cover;
     document.getElementById('naMetaDate').value=s.date;
     document.getElementById('naMetaDesc').value=s.description||'';
@@ -543,7 +699,7 @@ function renderNaPhotosGrid(s){
     document.getElementById('naPhotosCount').textContent=imgs.length+' 张';
     document.getElementById('naSelectAll').checked=false;
     const grid=document.getElementById('naPhotosGrid');
-    grid.innerHTML=imgs.map((url,i)=>'<div class="na-photo-item'+(naSelectedPhotos.has(i)?' selected':'')+'" data-idx="'+i+'"><img src="'+url+'" alt="" loading="lazy"><div class="na-photo-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div></div>').join('');
+    grid.innerHTML=imgs.map((url,i)=>'<div class="na-photo-item'+(naSelectedPhotos.has(i)?' selected':'')+'\" data-idx="'+i+'"><img src="'+url+'" alt="" loading="lazy"><div class="na-photo-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div></div>').join('');
     grid.querySelectorAll('.na-photo-item').forEach(item=>{item.addEventListener('click',()=>toggleNaPhoto(+item.dataset.idx,s))});
 }
 function toggleNaPhoto(idx,s){
@@ -563,7 +719,7 @@ document.getElementById('naChangeCover').addEventListener('click',()=>{
     if(!naCurrentSlug)return;
     openCldUpload(url=>{SHOOTS=SHOOTS.map(s=>s.slug===naCurrentSlug?{...s,cover:url,images:[url]}:s);saveShoots();document.getElementById('naDetailCoverImg').src=url;refreshSite();renderNaAlbumList()});
 });
-document.getElementById('naSaveMeta').addEventListener('click',()=>{
+document.getElementById('naSaveMeta').addEventListener('click',async()=>{
     if(!naCurrentSlug)return;
     const date=document.getElementById('naMetaDate').value;
     const desc=document.getElementById('naMetaDesc').value.trim();
@@ -572,49 +728,44 @@ document.getElementById('naSaveMeta').addEventListener('click',()=>{
     const drive=document.getElementById('naMetaDrive').value.trim();
     const d=new Date(date);
     SHOOTS=SHOOTS.map(s=>{if(s.slug!==naCurrentSlug)return s;return normalizeShoot({...s,date,year:d.getFullYear(),month:d.getMonth()+1,description:desc,people,equipment:equip,drive})});
-    saveShoots();refreshSite();renderNaAlbumList();
-    // Flash save button
+    const updated=shootBySlug(naCurrentSlug);
+    if(updated)await saveShootToSupabase(updated);
+    refreshSite();renderNaAlbumList();
     const btn=document.getElementById('naSaveMeta');btn.textContent='✓ 已保存';btn.style.background='var(--success)';setTimeout(()=>{btn.textContent='保存信息';btn.style.background=''},1800);
 });
 document.getElementById('naBatchUpload').addEventListener('click',()=>{
     if(!naCurrentSlug){alert('请先选择相册');return}
-    openCldUpload(url=>{
+    openCldUpload(async url=>{
         SHOOTS=SHOOTS.map(s=>s.slug===naCurrentSlug?{...s,galleryImages:[...(s.galleryImages||[]),url]}:s);
-        saveShoots();const s=shootBySlug(naCurrentSlug);if(s)renderNaPhotosGrid(s);refreshSite();
+        const updated=shootBySlug(naCurrentSlug);if(updated)await saveShootToSupabase(updated);
+        const s=shootBySlug(naCurrentSlug);if(s)renderNaPhotosGrid(s);refreshSite();
         document.getElementById('naPhotosCount').textContent=(shootBySlug(naCurrentSlug)?.galleryImages||[]).length+' 张';
     },{multiple:true});
 });
-document.getElementById('naBatchDelPhotos').addEventListener('click',()=>{
+document.getElementById('naBatchDelPhotos').addEventListener('click',async()=>{
     if(!naCurrentSlug||naSelectedPhotos.size===0)return;
     if(!confirm('确认删除选中的 '+naSelectedPhotos.size+' 张照片？'))return;
     SHOOTS=SHOOTS.map(s=>{if(s.slug!==naCurrentSlug)return s;const imgs=(s.galleryImages||[]).filter((_,i)=>!naSelectedPhotos.has(i));return{...s,galleryImages:imgs}});
-    naSelectedPhotos=new Set();saveShoots();
+    naSelectedPhotos=new Set();
     document.getElementById('naBatchDelPhotos').disabled=true;
+    const updated=shootBySlug(naCurrentSlug);if(updated)await saveShootToSupabase(updated);
     const s=shootBySlug(naCurrentSlug);if(s)renderNaPhotosGrid(s);refreshSite();
     document.getElementById('naPhotosCount').textContent=(shootBySlug(naCurrentSlug)?.galleryImages||[]).length+' 张';
 });
-document.getElementById('naNewAlbum').addEventListener('click',()=>{
-    openEdit(null);
-});
+document.getElementById('naNewAlbum').addEventListener('click',()=>{openEdit(null)});
 function renderNaSlidesBody(){
     const el=document.getElementById('naSlidesBody');if(!el)return;
     if(!HOME_SLIDES.length){el.innerHTML='<div style="font-family:DM Mono,monospace;font-size:.72rem;color:var(--text-dim);padding:2rem;text-align:center">暂无幻灯片，点击右上方按钮添加</div>';return}
     el.innerHTML=HOME_SLIDES.map((s,i)=>'<div class="na-slide-row"><img src="'+s.image_url+'" alt=""><div class="na-slide-row-info"><div class="na-slide-row-caption">'+(s.caption||'(无标题)')+'</div><div class="na-slide-row-sub">'+(s.sub||'—')+'</div></div><div class="na-slide-row-actions">'+(i>0?'<button data-smove="up" data-idx="'+i+'"><svg viewBox="0 0 24 24"><polyline points="18 15 12 9 6 15"/></svg></button>':'')+(i<HOME_SLIDES.length-1?'<button data-smove="down" data-idx="'+i+'"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></button>':'')+'<button data-sedit="'+i+'"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button><button class="del" data-sdel="'+i+'"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg></button></div></div>').join('');
     el.querySelectorAll('[data-sedit]').forEach(b=>b.addEventListener('click',()=>openSlideEdit(+b.dataset.sedit)));
     el.querySelectorAll('[data-sdel]').forEach(b=>b.addEventListener('click',()=>{if(!confirm('确认删除该幻灯片？'))return;HOME_SLIDES.splice(+b.dataset.sdel,1);saveHomeSlides();renderNaSlidesBody();router()}));
-    el.querySelectorAll('[data-smove]').forEach(b=>b.addEventListener('click',()=>{const idx=+b.dataset.idx,dir=b.dataset.smove,si=dir==='up'?idx-1:idx+1;[HOME_SLIDES[idx],HOME_SLIDES[si]]=[HOME_SLIDES[si],HOME_SLIDES[idx]];saveSlideOrder();renderNaSlidesBody();loadHomeSlides();router()}));
+    el.querySelectorAll('[data-smove]').forEach(b=>b.addEventListener('click',()=>{const idx=+b.dataset.idx,dir=b.dataset.smove,si=dir==='up'?idx-1:idx+1;[HOME_SLIDES[idx],HOME_SLIDES[si]]=[HOME_SLIDES[si],HOME_SLIDES[idx]];saveSlideOrder();renderNaSlidesBody();loadSlidesFromSupabase().then(()=>router())}));
 }
 document.getElementById('naNewSlide').addEventListener('click',()=>openSlideEdit(null));
 
+/* ADMIN FAB */
+document.getElementById('adminFab').addEventListener('click',()=>{if(isAdmin)openNewAdminPanel();else openAuth('login')});
+
 /* INIT */
-// 一次性清理 localStorage 里的无效幻灯片数据（your-bucket 占位符）
-(function cleanBadSlides(){
-    try{
-        const key='photo_gallery_home_slides';
-        const rows=JSON.parse(localStorage.getItem(key)||'[]');
-        const clean=rows.filter(s=>s.image_url&&!s.image_url.includes('your-bucket')&&!s.image_url.includes('your-bucket.supabase'));
-        if(clean.length!==rows.length)localStorage.setItem(key,JSON.stringify(clean));
-    }catch(e){}
-})();
 checkSession();
 refreshSite();
