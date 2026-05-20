@@ -258,7 +258,33 @@ function openDet(shoot){
     }else{
         gal.innerHTML='<div class="det-gallery-head"><h3>'+t('galleryTitle')+'</h3></div><div class="det-gallery-empty">'+t('noGallery')+'</div>'
     }
-    detOverlay.classList.add('open');document.body.style.overflow='hidden'
+    detOverlay.classList.add('open');document.body.style.overflow='hidden';
+
+    // 添加"下滑查看更多"提示
+    const existingHint = document.getElementById('detScrollHint');
+    if (existingHint) existingHint.remove();
+    const scrollHint = document.createElement('div');
+    scrollHint.className = 'det-scroll-hint';
+    scrollHint.id = 'detScrollHint';
+    scrollHint.innerHTML = '<span class="det-scroll-hint-text">下滑查看更多</span><svg class="det-scroll-hint-arrow" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>';
+    detOverlay.appendChild(scrollHint);
+
+    // 当英雄图片完整出现（滚动到顶部）时隐藏提示
+    const detBody = detOverlay.querySelector('.det-body');
+    const heroImg = document.getElementById('detHeroImg');
+    if (detBody && heroImg) {
+        const hintObs = new IntersectionObserver(entries => {
+            entries.forEach(e => {
+                if (e.intersectionRatio >= 0.98) {
+                    scrollHint.classList.add('hidden');
+                } else {
+                    scrollHint.classList.remove('hidden');
+                }
+            });
+        }, { root: detBody, threshold: [0, 0.5, 0.98, 1.0] });
+        hintObs.observe(heroImg);
+        activeObservers.push(hintObs);
+    }
 }
 
 /* FIX: closeDet navigates back to parent month page to prevent black screen */
