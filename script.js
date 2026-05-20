@@ -398,6 +398,6 @@ document.querySelectorAll('.admin-center-tab').forEach(tab => {
 });
 
 /* INIT */
-checkSession();   // <-- 加上这一行，恢复登录状态并构建右上角按钮
+checkSession();   // ← 新增
 refreshSite();
 
