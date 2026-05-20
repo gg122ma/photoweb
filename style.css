@@ -144,9 +144,10 @@ a { color: inherit; text-decoration: none; }
 /* DETAIL OVERLAY */
 .detail-overlay { position: fixed; inset: 0; z-index: 2000; background: var(--bg); display: flex; flex-direction: column; transform: translateX(100%); transition: transform .6s var(--ease); }
 .detail-overlay.open { transform: translateX(0); }
-.det-top-bar { height: 64px; display: flex; align-items: center; justify-content: space-between; padding: 0 2.5rem; border-bottom: 1px solid var(--border); background: var(--nav-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); flex-shrink: 0; z-index: 10; }
-.det-back { display: flex; align-items: center; gap: .5rem; font-family: 'DM Mono', monospace; font-size: .75rem; color: var(--accent); cursor: pointer; background: rgba(212,184,122,0.1); border: 1px solid transparent; letter-spacing: .08em; transition: all .3s var(--ease); padding: 0.4rem 1rem; border-radius: 30px; }
-.det-back:hover { background: var(--accent); color: var(--bg); opacity: 1; }
+.det-top-bar { height: 0; overflow: visible; border-bottom: none; padding: 0; flex-shrink: 0; z-index: 10; position: relative; }
+.det-back { position: absolute; top: 1.2rem; left: 1.5rem; z-index: 20; display: flex; align-items: center; gap: .5rem; font-family: 'DM Mono', monospace; font-size: .75rem; color: rgba(255,255,255,0.85); cursor: pointer; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.2); letter-spacing: .08em; transition: all .3s var(--ease); padding: 0.4rem 1rem; border-radius: 30px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); text-shadow: none; }
+[data-theme="light"] .det-back { color: rgba(255,255,255,0.9); background: rgba(0,0,0,0.3); border-color: rgba(255,255,255,0.25); }
+.det-back:hover { background: rgba(255,255,255,0.2); color: #fff; opacity: 1; }
 .det-back svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; }
 .det-cat { font-family: 'DM Mono', monospace; font-size: .6rem; color: var(--text-dim); letter-spacing: .2em; text-transform: uppercase; background: var(--surface2); padding: 0.4rem 1rem; border-radius: 20px; visibility: hidden; pointer-events: none; }
 
@@ -463,7 +464,6 @@ a { color: inherit; text-decoration: none; }
     .gal-info-equip { display: none; }
     .edit-row { grid-template-columns: 1fr; }
     .nav-dd[data-year="2026"] .nav-trigger { font-size: .72rem; padding: .4rem .8rem; }
-    .det-top-bar { padding: 0 1rem; height: 56px; }
     .det-hero { height: 40vh; }
     .det-content { padding: 0 1rem 1.5rem; }
     .det-gallery { padding: 0 1rem 2rem; }
