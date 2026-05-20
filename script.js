@@ -110,8 +110,46 @@ const pm=document.getElementById('profileMenu');if(pm){const adminItem=pm.queryS
 if(currentUser){const pb=document.getElementById('profileBtn');if(pb)pb.addEventListener('click',e=>{e.stopPropagation();document.getElementById('profileMenu').classList.toggle('open')})}else{const lb=document.getElementById('loginBtn');if(lb)lb.addEventListener('click',()=>openAuth('login'))}
 const pmMe=document.getElementById('profileMenuMe');if(pmMe)pmMe.onclick=()=>{document.getElementById('profileMenu').classList.remove('open');openProfilePage()};const pmAdmin=document.getElementById('profileMenuAdmin');if(pmAdmin)pmAdmin.onclick=()=>{document.getElementById('profileMenu').classList.remove('open');openNewAdminPanel()};updateAdminFab()}
 
-/* CLOUDINARY */
-function openCldUpload(cb,opts={}){if(typeof cloudinary==='undefined'){alert('Cloudinary not loaded');return}cloudinary.createUploadWidget({cloudName:CLOUD_NAME,uploadPreset:UPLOAD_PRESET,sources:['local','url'],multiple:!!opts.multiple,resourceType:'image',folder:'gallery',cropping:false,showAdvancedOptions:false},(err,res)=>{if(!err&&res&&res.event==='success')cb(res.info.secure_url,res.info)}).open()}
+/* CLOUDINARY — direct unsigned upload via hidden file input */
+function openCldUpload(cb, opts={}) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    if (opts.multiple) input.multiple = true;
+    input.style.display = 'none';
+    document.body.appendChild(input);
+
+    input.addEventListener('change', async () => {
+        const files = Array.from(input.files || []);
+        document.body.removeChild(input);
+        if (!files.length) return;
+
+        for (const file of files) {
+            try {
+                const fd = new FormData();
+                fd.append('file', file);
+                fd.append('upload_preset', UPLOAD_PRESET);
+                fd.append('folder', 'gallery');
+                const res = await fetch(
+                    'https://api.cloudinary.com/v1_1/' + CLOUD_NAME + '/image/upload',
+                    { method: 'POST', body: fd }
+                );
+                if (!res.ok) throw new Error('Upload failed: ' + res.status);
+                const data = await res.json();
+                if (data.secure_url) cb(data.secure_url, data);
+            } catch (e) {
+                console.error('Cloudinary upload error:', e);
+                alert('图片上传失败，请检查网络或 Cloudinary 配置。\n' + e.message);
+            }
+        }
+    });
+
+    input.addEventListener('cancel', () => {
+        document.body.removeChild(input);
+    });
+
+    input.click();
+}
 
 /* DATA */
 function parseGalleryImages(value){if(Array.isArray(value))return value;if(!value)return[];try{return JSON.parse(value)}catch(e){return[]}}
@@ -234,7 +272,7 @@ function closeDet(){
 
 document.getElementById('detBack').addEventListener('click',closeDet);
 document.getElementById('detCloseBtn').addEventListener('click',closeDet);
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeLB();closeDet();closeAdminCenter()}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeLB();closeDet();closeAdminCenter();closeNewAdminPanel()}});
 
 function renderDetail(slug){
     const s=shootBySlug(slug);
@@ -256,19 +294,7 @@ function renderAdminAlbumList(){const el=document.getElementById('adminAlbumList
 function addPendingPhotoToAlbum(){if(!adminPendingPhotoUrl){showAdminMsg('err','请先上传照片');return}const target=document.getElementById('adminPhotoAlbum').value;if(target==='__new__'){const title=document.getElementById('adminNewAlbumTitle').value.trim()||'Untitled';const date=document.getElementById('adminNewAlbumDate').value||new Date().toISOString().slice(0,10);const d=new Date(date);const slug=slugifyTitle(title);const row=normalizeShoot({id:slug,slug,title,date,year:d.getFullYear(),month:d.getMonth()+1,description:'',people:[],equipment:'',drive:'',cover:adminPendingPhotoUrl,galleryImages:[adminPendingPhotoUrl]});SHOOTS=[row,...SHOOTS]}else{SHOOTS=SHOOTS.map(s=>s.slug===target?{...s,galleryImages:[...(s.galleryImages||[]),adminPendingPhotoUrl]}:s)}saveShoots();refreshSite();fillAdminAlbumSelect();renderAdminAlbumList();resetAdminUpload();document.getElementById('adminNewAlbumTitle').value='';showAdminMsg('ok','照片已添加')}
 
 /* ADMIN */
-function renderAdmin(){if(!currentUser){app.innerHTML='<div class="empty page-enter" style="padding-top:140px"><p>'+t('pleaseLogin')+'</p></div>';return}if(!isAdmin){app.innerHTML='<div class="empty page-enter" style="padding-top:140px"><p>'+t('noPermission')+'</p></div>';return}renderHome();setTimeout(openAdminCenter,0);return;app.innerHTML='<div class="admin-wrap page-enter"><div class="admin-header"><h1>'+t('adminPanel')+'</h1><div class="admin-toolbar"><span class="sel-count" id="selCount"></span><button class="a-btn" id="aNew">+ '+t('newShoot')+'</button><button class="a-btn" id="aBatchCover">☁ '+t('batchCover')+'</button><button class="a-btn danger" id="aBatchDel">✕ '+t('batchDel')+'</button></div></div>'
-+'<div style="margin-bottom:2rem;padding:1.5rem;background:var(--surface2);border-radius:16px;border:1px solid var(--border)">'
-+'<div style="font-family:\'DM Mono\',monospace;font-size:.65rem;color:var(--accent);letter-spacing:.15em;text-transform:uppercase;margin-bottom:1rem;display:flex;align-items:center;gap:.4rem"><span style="width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block"></span>首页幻灯片管理</div>'
-+'<div id="homeSlidesAdmin" style="display:flex;flex-direction:column;gap:.8rem"></div>'
-+'<button class="a-btn" id="aAddSlide" style="margin-top:1rem">+ 添加幻灯片</button>'
-+'</div>'
-+'<table class="admin-table"><thead><tr><th><input type="checkbox" id="aSelAll"></th><th>'+t('cover')+'</th><th>'+t('titleLabel')+'</th><th>'+t('dateLabel')+'</th><th>'+t('equipLabel')+'</th><th>'+t('galleryPhotos')+'</th><th>'+t('edit')+'</th></tr></thead><tbody id="aTbody"></tbody></table></div>';
-renderAdminRows();renderHomeSlidesAdmin();
-document.getElementById('aSelAll').addEventListener('change',e=>{document.querySelectorAll('.a-chk').forEach(c=>c.checked=e.target.checked);updSel()});
-document.getElementById('aNew').addEventListener('click',()=>openEdit(null));
-document.getElementById('aBatchDel').addEventListener('click',batchDel);
-document.getElementById('aBatchCover').addEventListener('click',batchCov);
-document.getElementById('aAddSlide').addEventListener('click',()=>openSlideEdit(null))}
+function renderAdmin(){if(!currentUser){app.innerHTML='<div class="empty page-enter" style="padding-top:140px"><p>'+t('pleaseLogin')+'</p></div>';return}if(!isAdmin){app.innerHTML='<div class="empty page-enter" style="padding-top:140px"><p>'+t('noPermission')+'</p></div>';return}renderHome();setTimeout(openAdminCenter,0)}
 function renderAdminRows(){const tb=document.getElementById('aTbody');tb.innerHTML=SHOOTS.map(s=>'<tr data-slug="'+s.slug+'"><td><input type="checkbox" class="a-chk" data-slug="'+s.slug+'"></td><td><img class="th" src="'+s.cover+'" alt=""></td><td>'+s.title+'</td><td style="font-family:\'DM Mono\',monospace;font-size:.7rem;color:var(--text-secondary)">'+s.dateDisplay+'</td><td style="font-size:.75rem;color:var(--text-secondary)">'+s.equipment+'</td><td style="font-size:.7rem;color:var(--text-dim)">'+(s.galleryImages?s.galleryImages.length:0)+'</td><td><div style="display:flex;gap:.5rem"><button class="act-btn" data-act="edit" data-slug="'+s.slug+'">'+t('edit')+'</button><button class="act-btn del" data-act="del" data-slug="'+s.slug+'">'+t('delete')+'</button></div></td></tr>').join('');tb.querySelectorAll('.a-chk').forEach(c=>c.addEventListener('change',updSel));tb.querySelectorAll('[data-act="edit"]').forEach(b=>b.addEventListener('click',()=>openEdit(shootBySlug(b.dataset.slug))));tb.querySelectorAll('[data-act="del"]').forEach(b=>b.addEventListener('click',()=>{if(!confirm(t('confirmDel')))return;SHOOTS=SHOOTS.filter(s=>s.slug!==b.dataset.slug);saveShoots();refreshSite()}))}
 function getSel(){return[...document.querySelectorAll('.a-chk:checked')].map(c=>c.dataset.slug)}
 function updSel(){const n=getSel(),el=document.getElementById('selCount');if(el)el.textContent=n.length?n.length+' '+t('selected'):''}
@@ -346,9 +372,9 @@ function openEdit(shoot){
     document.getElementById('editOverlay').classList.add('active')
 }
 function renderEditGallery(){const el=document.getElementById('editGallery');el.innerHTML=editGalleryImages.map((url,i)=>'<div class="edit-gallery-thumb"><img src="'+url+'" alt=""><button class="edit-gallery-remove" data-idx="'+i+'">&times;</button></div>').join('');el.querySelectorAll('.edit-gallery-remove').forEach(b=>b.addEventListener('click',()=>{editGalleryImages.splice(+b.dataset.idx,1);renderEditGallery()}))}
-document.getElementById('editCoverArea').addEventListener('click',()=>openCldUpload(url=>{document.getElementById('editCoverInput').value=url;document.getElementById('editCoverImg').src=url;document.getElementById('coverEmpty').style.display='none'}));
-document.getElementById('editUploadBtn').addEventListener('click',()=>openCldUpload(url=>{document.getElementById('editCoverInput').value=url;document.getElementById('editCoverImg').src=url;document.getElementById('coverEmpty').style.display='none'}));
-document.getElementById('editUrlToggle').addEventListener('click',()=>{const g=document.getElementById('coverUrlGroup');g.style.display=g.style.display==='none'?'block':'none';if(g.style.display==='block')document.getElementById('editCoverInput').focus()});
+document.getElementById('editCoverArea').addEventListener('click',e=>{if(e.target.closest('.upload-btn')||e.target.closest('#coverUrlGroup'))return;openCldUpload(url=>{document.getElementById('editCoverInput').value=url;document.getElementById('editCoverImg').src=url;document.getElementById('coverEmpty').style.display='none'})});
+document.getElementById('editUploadBtn').addEventListener('click',e=>{e.stopPropagation();openCldUpload(url=>{document.getElementById('editCoverInput').value=url;document.getElementById('editCoverImg').src=url;document.getElementById('coverEmpty').style.display='none'})});
+document.getElementById('editUrlToggle').addEventListener('click',e=>{e.stopPropagation();const g=document.getElementById('coverUrlGroup');g.style.display=g.style.display==='none'?'block':'none';if(g.style.display==='block')document.getElementById('editCoverInput').focus()});
 document.getElementById('editCoverInput').addEventListener('change',function(){document.getElementById('editCoverImg').src=this.value||DEFAULT_COVER;document.getElementById('coverEmpty').style.display=this.value?'none':'flex'});
 document.getElementById('editGalleryAddBtn').addEventListener('click',()=>openCldUpload(url=>{editGalleryImages.push(url);renderEditGallery()},{multiple:true}));
 document.getElementById('editCancelBtn').addEventListener('click',()=>document.getElementById('editOverlay').classList.remove('active'));
@@ -532,7 +558,7 @@ document.getElementById('naBatchDelPhotos').addEventListener('click',()=>{
     document.getElementById('naPhotosCount').textContent=(shootBySlug(naCurrentSlug)?.galleryImages||[]).length+' 张';
 });
 document.getElementById('naNewAlbum').addEventListener('click',()=>{
-    closeNewAdminPanel();openEdit(null);
+    openEdit(null);
 });
 function renderNaSlidesBody(){
     const el=document.getElementById('naSlidesBody');if(!el)return;
@@ -540,7 +566,7 @@ function renderNaSlidesBody(){
     el.innerHTML=HOME_SLIDES.map((s,i)=>'<div class="na-slide-row"><img src="'+s.image_url+'" alt=""><div class="na-slide-row-info"><div class="na-slide-row-caption">'+(s.caption||'(无标题)')+'</div><div class="na-slide-row-sub">'+(s.sub||'—')+'</div></div><div class="na-slide-row-actions">'+(i>0?'<button data-smove="up" data-idx="'+i+'"><svg viewBox="0 0 24 24"><polyline points="18 15 12 9 6 15"/></svg></button>':'')+(i<HOME_SLIDES.length-1?'<button data-smove="down" data-idx="'+i+'"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></button>':'')+'<button data-sedit="'+i+'"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button><button class="del" data-sdel="'+i+'"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg></button></div></div>').join('');
     el.querySelectorAll('[data-sedit]').forEach(b=>b.addEventListener('click',()=>openSlideEdit(+b.dataset.sedit)));
     el.querySelectorAll('[data-sdel]').forEach(b=>b.addEventListener('click',()=>{if(!confirm('确认删除该幻灯片？'))return;HOME_SLIDES.splice(+b.dataset.sdel,1);saveHomeSlides();renderNaSlidesBody();router()}));
-    el.querySelectorAll('[data-smove]').forEach(b=>b.addEventListener('click',()=>{const idx=+b.dataset.idx,dir=b.dataset.smove,si=dir==='up'?idx-1:idx+1;[HOME_SLIDES[idx],HOME_SLIDES[si]]=[HOME_SLIDES[si],HOME_SLIDES[idx]];saveSlideOrder();renderNaSlidesBody();router()}));
+    el.querySelectorAll('[data-smove]').forEach(b=>b.addEventListener('click',()=>{const idx=+b.dataset.idx,dir=b.dataset.smove,si=dir==='up'?idx-1:idx+1;[HOME_SLIDES[idx],HOME_SLIDES[si]]=[HOME_SLIDES[si],HOME_SLIDES[idx]];saveSlideOrder();renderNaSlidesBody();loadHomeSlides();router()}));
 }
 document.getElementById('naNewSlide').addEventListener('click',()=>openSlideEdit(null));
 
