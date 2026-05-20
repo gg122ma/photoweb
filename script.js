@@ -269,21 +269,30 @@ function openDet(shoot){
     scrollHint.innerHTML = '<span class="det-scroll-hint-text">下滑查看更多</span><svg class="det-scroll-hint-arrow" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>';
     detOverlay.appendChild(scrollHint);
 
-    // 当英雄图片完整出现（滚动到顶部）时隐藏提示
+    // 监听 det-body 滚动：当英雄图片完整出现（回到顶部）时隐藏提示，下滑后显示
     const detBody = detOverlay.querySelector('.det-body');
-    const heroImg = document.getElementById('detHeroImg');
-    if (detBody && heroImg) {
-        const hintObs = new IntersectionObserver(entries => {
-            entries.forEach(e => {
-                if (e.intersectionRatio >= 0.98) {
-                    scrollHint.classList.add('hidden');
-                } else {
-                    scrollHint.classList.remove('hidden');
-                }
-            });
-        }, { root: detBody, threshold: [0, 0.5, 0.98, 1.0] });
-        hintObs.observe(heroImg);
-        activeObservers.push(hintObs);
+    const detHero = detOverlay.querySelector('.det-hero');
+    if (detBody && detHero) {
+        // 先重置到顶部
+        detBody.scrollTop = 0;
+        // 初始：顶部时隐藏提示（等动画播完再显示）
+        scrollHint.classList.add('hidden');
+        setTimeout(() => { scrollHint.classList.remove('hidden'); }, 1200);
+
+        const onScroll = () => {
+            const heroH = detHero.offsetHeight;
+            if (detBody.scrollTop >= heroH * 0.85) {
+                // 已滑过英雄图片区域，隐藏提示
+                scrollHint.classList.add('hidden');
+            } else {
+                scrollHint.classList.remove('hidden');
+            }
+        };
+        detBody.addEventListener('scroll', onScroll);
+        // 关闭时清理
+        const origClose = detOverlay._scrollCleanup;
+        if (origClose) origClose();
+        detOverlay._scrollCleanup = () => detBody.removeEventListener('scroll', onScroll);
     }
 }
 
@@ -292,6 +301,7 @@ function closeDet(){
     if(!detOverlay.classList.contains('open'))return;
     detOverlay.classList.remove('open');
     document.body.style.overflow='';
+    if(detOverlay._scrollCleanup){detOverlay._scrollCleanup();detOverlay._scrollCleanup=null;}
     const hm=location.hash.match(/^#\/shoot\/(.+)$/);
     if(hm){const s=shootBySlug(hm[1]);location.hash=s?'#/month/'+s.year+'/'+s.month:'#/'}
 }
