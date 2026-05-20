@@ -480,7 +480,7 @@ function setNaTab(tab){document.querySelectorAll('.new-admin-tab').forEach(t=>t.
 function renderNaAlbumList(){
     const el=document.getElementById('naAlbumList');
     if(!SHOOTS.length){el.innerHTML='<div style="padding:1rem;font-family:DM Mono,monospace;font-size:.65rem;color:var(--text-dim)">暂无相册</div>';return}
-    el.innerHTML=SHOOTS.map(s=>'<div class="na-album-item'+(naCurrentSlug===s.slug?' active':'')+'" data-slug="'+s.slug+'"><img src="'+s.cover+'" alt="" loading="lazy"><div class="na-album-item-info"><div class="na-album-item-title">'+s.dateDisplay+'</div><div class="na-album-item-meta">'+(s.galleryImages?s.galleryImages.length:0)+' 张照片</div></div></div>').join('');
+    el.innerHTML=[...SHOOTS].sort((a,b)=>new Date(a.date)-new Date(b.date)).map(s=>'<div class="na-album-item'+(naCurrentSlug===s.slug?' active':'')+'" data-slug="'+s.slug+'"><img src="'+s.cover+'" alt="" loading="lazy"><div class="na-album-item-info"><div class="na-album-item-title">'+s.dateDisplay+'</div><div class="na-album-item-meta">'+(s.galleryImages?s.galleryImages.length:0)+' 张照片</div></div></div>').join('');
     el.querySelectorAll('.na-album-item').forEach(item=>{item.addEventListener('click',()=>selectNaAlbum(item.dataset.slug))});
 }
 function selectNaAlbum(slug){
