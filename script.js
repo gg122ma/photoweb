@@ -105,7 +105,10 @@ authModal.addEventListener('click',e=>{if(e.target===authModal)authModal.classLi
 document.getElementById('authSubmit').addEventListener('click',()=>{const email=normalizeEmail(document.getElementById('authEmail').value),pass=document.getElementById('authPass').value,msg=document.getElementById('authMsg');if(!email||!pass){msg.textContent=t('pleaseLogin');msg.className='form-msg err';return}const users=readStore(STORAGE_KEYS.users,{});try{if(authMode==='register'){if(users[email])throw new Error('Account already exists');users[email]={email,password:pass,createdAt:new Date().toISOString()};writeStore(STORAGE_KEYS.users,users)}else{if(!users[email]&&ADMIN_EMAILS.includes(email)){users[email]={email,password:pass,createdAt:new Date().toISOString()};writeStore(STORAGE_KEYS.users,users)}if(!users[email]||users[email].password!==pass)throw new Error('Invalid email or password')}writeStore(STORAGE_KEYS.session,{email});checkSession();msg.textContent=authMode==='login'?t('loginOk'):t('regOk');msg.className='form-msg ok';setTimeout(()=>{authModal.classList.remove('active');router()},500)}catch(e){msg.textContent=e.message||'Error';msg.className='form-msg err'}});
 function doLogout(){localStorage.removeItem(STORAGE_KEYS.session);currentUser=null;isAdmin=false;buildNavRight();if(location.hash==='#/admin')location.hash='#/';else router()}
 
-function buildNavRight(){const el=document.getElementById('navRight'),th=document.documentElement.dataset.theme;let h='<button class="nav-btn" id="themeBtn" title="Theme">'+(th==='dark'?'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>':'<svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z"/></svg>')+'</button>';const ll={zh:'中文',en:'EN',ms:'BM'};h+='<div class="lang-dd" id="langDD"><button class="nav-btn" id="langBtn">'+ll[currentLang]+' <svg viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="lang-panel">'+Object.entries(ll).map(([k,v])=>'<button class="lang-opt'+(k===currentLang?' active':'')+'" data-lang="'+k+'">'+v+'</button>').join('')+'</div></div>';if(currentUser){h+='<button class="nav-btn user-chip" id="profileBtn" title="'+currentUser.email+'"><img class="user-avatar" src="'+currentUser.avatar+'" alt=""><span class="user-email">'+currentUser.email+'</span></button>';if(isAdmin)h+='<button class="nav-btn" id="adminBtn">'+t('admin')+'</button>';h+='<button class="nav-btn" id="logoutBtn">'+t('logout')+'</button>'}else h+='<button class="nav-btn" id="loginBtn">'+t('login')+'</button>';el.innerHTML=h;document.getElementById('themeBtn').addEventListener('click',toggleTheme);const ld=document.getElementById('langDD');document.getElementById('langBtn').addEventListener('click',e=>{e.stopPropagation();ld.classList.toggle('open')});ld.querySelectorAll('.lang-opt').forEach(b=>b.addEventListener('click',()=>{setLang(b.dataset.lang);ld.classList.remove('open')}));if(!buildNavRight._bound){buildNavRight._bound=true;document.addEventListener('click',e=>{if(!e.target.closest('.lang-dd')){const ld2=document.querySelector('.lang-dd');if(ld2)ld2.classList.remove('open')}})};if(currentUser){if(isAdmin)document.getElementById('adminBtn').addEventListener('click',openAdminCenter);document.getElementById('logoutBtn').addEventListener('click',doLogout)}else document.getElementById('loginBtn').addEventListener('click',()=>openAuth('login'));updateAdminFab()}
+function buildNavRight(){const el=document.getElementById('navRight'),th=document.documentElement.dataset.theme;let h='<button class="nav-btn" id="themeBtn" title="Theme">'+(th==='dark'?'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>':'<svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z"/></svg>')+'</button>';const ll={zh:'中文',en:'EN',ms:'BM'};h+='<div class="lang-dd" id="langDD"><button class="nav-btn" id="langBtn">'+ll[currentLang]+' <svg viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div class="lang-panel">'+Object.entries(ll).map(([k,v])=>'<button class="lang-opt'+(k===currentLang?' active':'')+'" data-lang="'+k+'">'+v+'</button>').join('')+'</div></div>';if(currentUser){h+='<button class="nav-btn user-chip" id="profileBtn" title="'+currentUser.email+'"><img class="user-avatar" src="'+currentUser.avatar+'" alt=""><span class="user-email">'+currentUser.email+'</span></button>'}else h+='<button class="nav-btn" id="loginBtn">'+t('login')+'</button>';el.innerHTML=h;document.getElementById('themeBtn').addEventListener('click',toggleTheme);const ld=document.getElementById('langDD');document.getElementById('langBtn').addEventListener('click',e=>{e.stopPropagation();ld.classList.toggle('open')});ld.querySelectorAll('.lang-opt').forEach(b=>b.addEventListener('click',()=>{setLang(b.dataset.lang);ld.classList.remove('open')}));if(!buildNavRight._bound){buildNavRight._bound=true;document.addEventListener('click',e=>{if(!e.target.closest('.lang-dd')){const ld2=document.querySelector('.lang-dd');if(ld2)ld2.classList.remove('open')};if(!e.target.closest('#profileBtn')&&!e.target.closest('#profileMenu')){const pm=document.getElementById('profileMenu');if(pm)pm.classList.remove('open')}})}
+const pm=document.getElementById('profileMenu');if(pm){const adminItem=pm.querySelector('#profileMenuAdmin');if(adminItem)adminItem.style.display=isAdmin?'flex':'none'}
+if(currentUser){const pb=document.getElementById('profileBtn');if(pb)pb.addEventListener('click',e=>{e.stopPropagation();document.getElementById('profileMenu').classList.toggle('open')})}else{const lb=document.getElementById('loginBtn');if(lb)lb.addEventListener('click',()=>openAuth('login'))}
+const pmMe=document.getElementById('profileMenuMe');if(pmMe)pmMe.onclick=()=>{document.getElementById('profileMenu').classList.remove('open');openProfilePage()};const pmAdmin=document.getElementById('profileMenuAdmin');if(pmAdmin)pmAdmin.onclick=()=>{document.getElementById('profileMenu').classList.remove('open');openNewAdminPanel()};updateAdminFab()}
 
 /* CLOUDINARY */
 function openCldUpload(cb,opts={}){if(typeof cloudinary==='undefined'){alert('Cloudinary not loaded');return}cloudinary.createUploadWidget({cloudName:CLOUD_NAME,uploadPreset:UPLOAD_PRESET,sources:['local','url'],multiple:!!opts.multiple,resourceType:'image',folder:'gallery',cropping:false,showAdvancedOptions:false},(err,res)=>{if(!err&&res&&res.event==='success')cb(res.info.secure_url,res.info)}).open()}
@@ -397,7 +400,138 @@ document.querySelectorAll('.admin-center-tab').forEach(tab => {
     tab.addEventListener('click', () => setAdminPanel(tab.dataset.panel));
 });
 
-/* INIT */
-checkSession();   // ← 新增
-refreshSite();
+/* PROFILE PAGE */
+function openProfilePage(){
+    if(!currentUser)return;
+    const ov=document.getElementById('profileOverlay');
+    const aw=document.getElementById('profileAvatarWrap');
+    aw.innerHTML='<img src="'+currentUser.avatar+'" alt="">';
+    document.getElementById('profileEmail').textContent=currentUser.email;
+    document.getElementById('profileRole').textContent=isAdmin?'管理员 · Admin':'普通用户';
+    const totalPhotos=SHOOTS.reduce((a,s)=>a+(s.galleryImages?s.galleryImages.length:0),0);
+    document.getElementById('profileStats').innerHTML='<div class="profile-stat"><div class="profile-stat-num">'+SHOOTS.length+'</div><div class="profile-stat-label">相册</div></div><div class="profile-stat"><div class="profile-stat-num">'+totalPhotos+'</div><div class="profile-stat-label">照片</div></div><div class="profile-stat"><div class="profile-stat-num">'+HOME_SLIDES.length+'</div><div class="profile-stat-label">幻灯片</div></div>';
+    ov.classList.add('open');document.body.style.overflow='hidden';
+}
+function closeProfilePage(){document.getElementById('profileOverlay').classList.remove('open');document.body.style.overflow=''}
+document.getElementById('profileClose').addEventListener('click',closeProfilePage);
+document.getElementById('profileOverlay').addEventListener('click',e=>{if(e.target.id==='profileOverlay')closeProfilePage()});
+document.getElementById('profileLogoutBtn').addEventListener('click',()=>{closeProfilePage();doLogout()});
 
+/* NEW ADMIN PANEL */
+let naCurrentSlug=null,naSelectedPhotos=new Set();
+
+function openNewAdminPanel(){
+    if(!isAdmin){openAuth('login');return}
+    naCurrentSlug=null;naSelectedPhotos=new Set();
+    renderNaAlbumList();renderNaSlidesBody();
+    document.getElementById('naEmptyState').style.display='flex';
+    document.getElementById('naAlbumDetail').style.display='none';
+    document.getElementById('naBatchUpload').disabled=true;
+    document.getElementById('naBatchDelPhotos').disabled=true;
+    document.getElementById('newAdminSelInfo').textContent='请先选择相册';
+    document.getElementById('newAdminSelInfo').classList.remove('active');
+    setNaTab('albums');
+    document.getElementById('newAdminOverlay').classList.add('open');
+    document.body.style.overflow='hidden';
+}
+function closeNewAdminPanel(){document.getElementById('newAdminOverlay').classList.remove('open');document.body.style.overflow=''}
+document.getElementById('newAdminClose').addEventListener('click',closeNewAdminPanel);
+document.querySelectorAll('.new-admin-tab').forEach(tab=>{tab.addEventListener('click',()=>setNaTab(tab.dataset.tab))});
+function setNaTab(tab){document.querySelectorAll('.new-admin-tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===tab));document.querySelectorAll('.new-admin-panel').forEach(p=>p.classList.toggle('active',p.id==='tab-'+tab))}
+
+function renderNaAlbumList(){
+    const el=document.getElementById('naAlbumList');
+    if(!SHOOTS.length){el.innerHTML='<div style="padding:1rem;font-family:'DM Mono',monospace;font-size:.65rem;color:var(--text-dim)">暂无相册</div>';return}
+    el.innerHTML=SHOOTS.map(s=>'<div class="na-album-item'+(naCurrentSlug===s.slug?' active':'')+'" data-slug="'+s.slug+'"><img src="'+s.cover+'" alt="" loading="lazy"><div class="na-album-item-info"><div class="na-album-item-title">'+s.dateDisplay+'</div><div class="na-album-item-meta">'+(s.galleryImages?s.galleryImages.length:0)+' 张照片</div></div></div>').join('');
+    el.querySelectorAll('.na-album-item').forEach(item=>{item.addEventListener('click',()=>selectNaAlbum(item.dataset.slug))});
+}
+function selectNaAlbum(slug){
+    naCurrentSlug=slug;naSelectedPhotos=new Set();
+    renderNaAlbumList();
+    const s=shootBySlug(slug);if(!s)return;
+    document.getElementById('naEmptyState').style.display='none';
+    document.getElementById('naAlbumDetail').style.display='block';
+    document.getElementById('naBatchUpload').disabled=false;
+    document.getElementById('naBatchDelPhotos').disabled=true;
+    document.getElementById('newAdminSelInfo').textContent='已选：'+s.dateDisplay;
+    document.getElementById('newAdminSelInfo').classList.add('active');
+    // Fill cover & meta
+    document.getElementById('naDetailCoverImg').src=s.cover;
+    document.getElementById('naMetaDate').value=s.date;
+    document.getElementById('naMetaDesc').value=s.description||'';
+    document.getElementById('naMetaPeople').value=(s.people||[]).join(', ');
+    document.getElementById('naMetaEquip').value=s.equipment||'';
+    document.getElementById('naMetaDrive').value=s.drive||'';
+    renderNaPhotosGrid(s);
+}
+function renderNaPhotosGrid(s){
+    const imgs=s.galleryImages||[];
+    document.getElementById('naPhotosCount').textContent=imgs.length+' 张';
+    document.getElementById('naSelectAll').checked=false;
+    const grid=document.getElementById('naPhotosGrid');
+    grid.innerHTML=imgs.map((url,i)=>'<div class="na-photo-item'+(naSelectedPhotos.has(i)?' selected':'')+'" data-idx="'+i+'"><img src="'+url+'" alt="" loading="lazy"><div class="na-photo-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div></div>').join('');
+    grid.querySelectorAll('.na-photo-item').forEach(item=>{item.addEventListener('click',()=>toggleNaPhoto(+item.dataset.idx,s))});
+}
+function toggleNaPhoto(idx,s){
+    if(naSelectedPhotos.has(idx))naSelectedPhotos.delete(idx);else naSelectedPhotos.add(idx);
+    document.getElementById('naBatchDelPhotos').disabled=naSelectedPhotos.size===0;
+    document.getElementById('naSelectAll').checked=naSelectedPhotos.size===(s.galleryImages||[]).length;
+    renderNaPhotosGrid(s);
+}
+document.getElementById('naSelectAll').addEventListener('change',function(){
+    const s=shootBySlug(naCurrentSlug);if(!s)return;
+    const imgs=s.galleryImages||[];
+    naSelectedPhotos=this.checked?new Set(imgs.map((_,i)=>i)):new Set();
+    document.getElementById('naBatchDelPhotos').disabled=naSelectedPhotos.size===0;
+    renderNaPhotosGrid(s);
+});
+document.getElementById('naChangeCover').addEventListener('click',()=>{
+    if(!naCurrentSlug)return;
+    openCldUpload(url=>{SHOOTS=SHOOTS.map(s=>s.slug===naCurrentSlug?{...s,cover:url,images:[url]}:s);saveShoots();document.getElementById('naDetailCoverImg').src=url;refreshSite();renderNaAlbumList()});
+});
+document.getElementById('naSaveMeta').addEventListener('click',()=>{
+    if(!naCurrentSlug)return;
+    const date=document.getElementById('naMetaDate').value;
+    const desc=document.getElementById('naMetaDesc').value.trim();
+    const people=document.getElementById('naMetaPeople').value.split(',').map(s=>s.trim()).filter(Boolean);
+    const equip=document.getElementById('naMetaEquip').value.trim();
+    const drive=document.getElementById('naMetaDrive').value.trim();
+    const d=new Date(date);
+    SHOOTS=SHOOTS.map(s=>{if(s.slug!==naCurrentSlug)return s;return normalizeShoot({...s,date,year:d.getFullYear(),month:d.getMonth()+1,description:desc,people,equipment:equip,drive})});
+    saveShoots();refreshSite();renderNaAlbumList();
+    // Flash save button
+    const btn=document.getElementById('naSaveMeta');btn.textContent='✓ 已保存';btn.style.background='var(--success)';setTimeout(()=>{btn.textContent='保存信息';btn.style.background=''},1800);
+});
+document.getElementById('naBatchUpload').addEventListener('click',()=>{
+    if(!naCurrentSlug){alert('请先选择相册');return}
+    openCldUpload(url=>{
+        SHOOTS=SHOOTS.map(s=>s.slug===naCurrentSlug?{...s,galleryImages:[...(s.galleryImages||[]),url]}:s);
+        saveShoots();const s=shootBySlug(naCurrentSlug);if(s)renderNaPhotosGrid(s);refreshSite();
+        document.getElementById('naPhotosCount').textContent=(shootBySlug(naCurrentSlug)?.galleryImages||[]).length+' 张';
+    },{multiple:true});
+});
+document.getElementById('naBatchDelPhotos').addEventListener('click',()=>{
+    if(!naCurrentSlug||naSelectedPhotos.size===0)return;
+    if(!confirm('确认删除选中的 '+naSelectedPhotos.size+' 张照片？'))return;
+    SHOOTS=SHOOTS.map(s=>{if(s.slug!==naCurrentSlug)return s;const imgs=(s.galleryImages||[]).filter((_,i)=>!naSelectedPhotos.has(i));return{...s,galleryImages:imgs}});
+    naSelectedPhotos=new Set();saveShoots();
+    document.getElementById('naBatchDelPhotos').disabled=true;
+    const s=shootBySlug(naCurrentSlug);if(s)renderNaPhotosGrid(s);refreshSite();
+    document.getElementById('naPhotosCount').textContent=(shootBySlug(naCurrentSlug)?.galleryImages||[]).length+' 张';
+});
+document.getElementById('naNewAlbum').addEventListener('click',()=>{
+    closeNewAdminPanel();openEdit(null);
+});
+function renderNaSlidesBody(){
+    const el=document.getElementById('naSlidesBody');if(!el)return;
+    if(!HOME_SLIDES.length){el.innerHTML='<div style="font-family:'DM Mono',monospace;font-size:.72rem;color:var(--text-dim);padding:2rem;text-align:center">暂无幻灯片，点击右上方按钮添加</div>';return}
+    el.innerHTML=HOME_SLIDES.map((s,i)=>'<div class="na-slide-row"><img src="'+s.image_url+'" alt=""><div class="na-slide-row-info"><div class="na-slide-row-caption">'+(s.caption||'(无标题)')+'</div><div class="na-slide-row-sub">'+(s.sub||'—')+'</div></div><div class="na-slide-row-actions">'+(i>0?'<button data-smove="up" data-idx="'+i+'"><svg viewBox="0 0 24 24"><polyline points="18 15 12 9 6 15"/></svg></button>':'')+(i<HOME_SLIDES.length-1?'<button data-smove="down" data-idx="'+i+'"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></button>':'')+'<button data-sedit="'+i+'"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button><button class="del" data-sdel="'+i+'"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg></button></div></div>').join('');
+    el.querySelectorAll('[data-sedit]').forEach(b=>b.addEventListener('click',()=>openSlideEdit(+b.dataset.sedit)));
+    el.querySelectorAll('[data-sdel]').forEach(b=>b.addEventListener('click',()=>{if(!confirm('确认删除该幻灯片？'))return;HOME_SLIDES.splice(+b.dataset.sdel,1);saveHomeSlides();renderNaSlidesBody();router()}));
+    el.querySelectorAll('[data-smove]').forEach(b=>b.addEventListener('click',()=>{const idx=+b.dataset.idx,dir=b.dataset.smove,si=dir==='up'?idx-1:idx+1;[HOME_SLIDES[idx],HOME_SLIDES[si]]=[HOME_SLIDES[si],HOME_SLIDES[idx]];saveSlideOrder();renderNaSlidesBody();router()}));
+}
+document.getElementById('naNewSlide').addEventListener('click',()=>openSlideEdit(null));
+
+/* INIT */
+checkSession();
+refreshSite();
