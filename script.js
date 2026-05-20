@@ -167,7 +167,7 @@ function isValidImageUrl(url){
 async function importLegacySlidesIfEmpty(){const rows=readStore(STORAGE_KEYS.slides,[]);if(rows.length)return;try{const data=await fetchLegacyTable('home_slides','select=*&order=sort_order.asc');if(!Array.isArray(data)||!data.length)return;const valid=data.filter(s=>isValidImageUrl(s.image_url));if(!valid.length)return;writeStore(STORAGE_KEYS.slides,valid.map((s,i)=>({id:s.id||('slide-'+i),image_url:s.image_url,caption:s.caption||'',sub:s.sub||'',sort_order:s.sort_order||i})))}catch(e){console.warn(e)}}
 function normalizeShoot(s){const date=s.date||s.shoot_date||new Date().toISOString().slice(0,10),d=new Date(date);return{slug:s.slug,id:s.id||s.slug,date,year:s.year||s.year_num||d.getFullYear(),month:s.month||s.month_num||d.getMonth()+1,title:s.title||'',description:s.description||'',people:Array.isArray(s.people)?s.people:[],equipment:s.equipment||'',drive:s.drive||s.drive_link||'',cover:s.cover||s.cover_url||DEFAULT_COVER,images:[s.cover||s.cover_url||DEFAULT_IMAGE],galleryImages:parseGalleryImages(s.galleryImages||s.gallery_images),dateDisplay:fmtDate(date)}}
 function saveShoots(){writeStore(STORAGE_KEYS.shoots,SHOOTS.map(s=>({id:s.id,slug:s.slug,date:s.date,year:s.year,month:s.month,title:s.title,description:s.description,people:s.people,equipment:s.equipment,drive:s.drive,cover:s.cover,galleryImages:s.galleryImages})))}
-function loadData(){const rows=readStore(STORAGE_KEYS.shoots,[]);SHOOTS=rows.map(normalizeShoot).sort((a,b)=>new Date(b.date)-new Date(a.date));monthSet=new Set(SHOOTS.map(s=>s.year+'-'+s.month));buildNav()}
+function loadData(){const rows=readStore(STORAGE_KEYS.shoots,[]);SHOOTS=rows.map(normalizeShoot).sort((a,b)=>new Date(a.date)-new Date(b.date));monthSet=new Set(SHOOTS.map(s=>s.year+'-'+s.month));buildNav()}
 async function refreshSite(){await importLegacyShootsIfEmpty();loadData();await importLegacySlidesIfEmpty();loadHomeSlides();router()}
 function shootsByMonth(y,m){return SHOOTS.filter(s=>s.year===y&&s.month===m)}
 function shootBySlug(sl){return SHOOTS.find(s=>s.slug===sl)}
@@ -480,7 +480,7 @@ function setNaTab(tab){document.querySelectorAll('.new-admin-tab').forEach(t=>t.
 function renderNaAlbumList(){
     const el=document.getElementById('naAlbumList');
     if(!SHOOTS.length){el.innerHTML='<div style="padding:1rem;font-family:DM Mono,monospace;font-size:.65rem;color:var(--text-dim)">暂无相册</div>';return}
-    el.innerHTML=SHOOTS.map(s=>'<div class="na-album-item'+(naCurrentSlug===s.slug?' active':'')+'" data-slug="'+s.slug+'"><img src="'+s.cover+'" alt="" loading="lazy"><div class="na-album-item-info"><div class="na-album-item-title">'+s.dateDisplay+'</div><div class="na-album-item-meta">'+(s.galleryImages?s.galleryImages.length:0)+' 张照片</div></div></div>').join('');
+    el.innerHTML=[...SHOOTS].sort((a,b)=>new Date(a.date)-new Date(b.date)).map(s=>'<div class="na-album-item'+(naCurrentSlug===s.slug?' active':'')+'" data-slug="'+s.slug+'"><img src="'+s.cover+'" alt="" loading="lazy"><div class="na-album-item-info"><div class="na-album-item-title">'+s.dateDisplay+'</div><div class="na-album-item-meta">'+(s.galleryImages?s.galleryImages.length:0)+' 张照片</div></div></div>').join('');
     el.querySelectorAll('.na-album-item').forEach(item=>{item.addEventListener('click',()=>selectNaAlbum(item.dataset.slug))});
 }
 function selectNaAlbum(slug){
