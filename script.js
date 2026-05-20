@@ -110,53 +110,159 @@ const pm=document.getElementById('profileMenu');if(pm){const adminItem=pm.queryS
 if(currentUser){const pb=document.getElementById('profileBtn');if(pb)pb.addEventListener('click',e=>{e.stopPropagation();document.getElementById('profileMenu').classList.toggle('open')})}else{const lb=document.getElementById('loginBtn');if(lb)lb.addEventListener('click',()=>openAuth('login'))}
 const pmMe=document.getElementById('profileMenuMe');if(pmMe)pmMe.onclick=()=>{document.getElementById('profileMenu').classList.remove('open');openProfilePage()};const pmAdmin=document.getElementById('profileMenuAdmin');if(pmAdmin)pmAdmin.onclick=()=>{document.getElementById('profileMenu').classList.remove('open');openNewAdminPanel()};updateAdminFab()}
 
-/* CLOUDINARY — 预缓存 widget，点击即开，支持真正批量上传 */
-const _cldCache = {};
-function _makeCldWidget(multi) {
-    if (typeof cloudinary === 'undefined') return null;
-    let _pending = [];
-    const w = cloudinary.createUploadWidget({
-        cloudName: CLOUD_NAME, uploadPreset: UPLOAD_PRESET,
-        sources: ['local', 'url'], multiple: !!multi,
-        resourceType: 'image', folder: 'gallery',
-        cropping: false, showAdvancedOptions: false,
-        clientAllowedFormats: ['jpg','jpeg','png','webp','gif','heic','heif'],
-        maxFileSize: 50000000  // 50MB，支持原图
-    }, (err, res) => {
-        if (!err && res) {
-            if (res.event === 'success') _pending.push({ url: res.info.secure_url, info: res.info });
-            if (res.event === 'close') {
-                if (_pending.length && w._cb) w._cb(_pending.map(x => x.url), _pending.map(x => x.info));
-                _pending = []; w._cb = null;
-            }
-        }
+/* ============================================================
+   CLOUDINARY 直传系统
+   - 绕过 widget，直接用 Fetch 上传到 /upload API
+   - 支持拖拽、粘贴、点击选文件，批量并行上传
+   - 不依赖 Upload Preset 配置（使用 unsigned 直传）
+   ============================================================ */
+
+async function uploadFileToCloudinary(file) {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('upload_preset', UPLOAD_PRESET);
+    fd.append('folder', 'gallery');
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
+        method: 'POST', body: fd
     });
-    return w;
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error?.message || `Upload failed: ${res.status}`);
+    }
+    const data = await res.json();
+    return data.secure_url;
 }
-function _getCldWidget(multi) {
-    const k = multi ? 'multi' : 'single';
-    if (!_cldCache[k]) _cldCache[k] = _makeCldWidget(multi);
-    return _cldCache[k];
+
+// 批量上传多个文件，返回 url 数组，带进度回调
+async function uploadFiles(files, onProgress) {
+    const urls = [];
+    let done = 0;
+    const total = files.length;
+    const tasks = Array.from(files).map(async file => {
+        const url = await uploadFileToCloudinary(file);
+        urls.push(url);
+        done++;
+        if (onProgress) onProgress(done, total);
+        return url;
+    });
+    await Promise.all(tasks);
+    return urls;
 }
-function prewarmCldWidgets() {
-    if (typeof cloudinary === 'undefined') return;
-    _getCldWidget(false); _getCldWidget(true);
+
+// 创建拖拽上传区域，挂载到指定元素
+// opts: { multiple, onDone(urls), label }
+function makeDragZone(container, opts = {}) {
+    const multi = opts.multiple !== false;
+    const label = opts.label || (multi ? '拖拽照片到此处，或点击选择' : '拖拽图片到此处，或点击选择');
+
+    container.innerHTML = `
+        <div class="drag-zone" id="dz_${container.id}">
+            <input type="file" accept="image/*" ${multi ? 'multiple' : ''} class="dz-input">
+            <div class="dz-idle">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <span>${label}</span>
+                <em>支持 JPG · PNG · WEBP · HEIC 原图</em>
+            </div>
+            <div class="dz-progress" style="display:none">
+                <div class="dz-progress-bar"><div class="dz-progress-fill"></div></div>
+                <div class="dz-progress-text">准备上传...</div>
+            </div>
+            <div class="dz-done" style="display:none">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                <span class="dz-done-text"></span>
+            </div>
+        </div>`;
+
+    const zone = container.querySelector('.drag-zone');
+    const input = zone.querySelector('.dz-input');
+    const idle = zone.querySelector('.dz-idle');
+    const progress = zone.querySelector('.dz-progress');
+    const fill = zone.querySelector('.dz-progress-fill');
+    const progressText = zone.querySelector('.dz-progress-text');
+    const doneEl = zone.querySelector('.dz-done');
+    const doneText = zone.querySelector('.dz-done-text');
+
+    async function handleFiles(files) {
+        if (!files || !files.length) return;
+        const validFiles = Array.from(files).filter(f => f.type.startsWith('image/') || f.name.match(/\.(heic|heif)$/i));
+        if (!validFiles.length) { alert('请选择图片文件'); return; }
+
+        idle.style.display = 'none';
+        progress.style.display = 'flex';
+        doneEl.style.display = 'none';
+        zone.classList.add('uploading');
+
+        try {
+            const urls = await uploadFiles(validFiles, (done, total) => {
+                const pct = Math.round(done / total * 100);
+                fill.style.width = pct + '%';
+                progressText.textContent = `已上传 ${done} / ${total} 张...`;
+            });
+            progress.style.display = 'none';
+            doneEl.style.display = 'flex';
+            doneText.textContent = `✓ ${urls.length} 张上传完成`;
+            zone.classList.remove('uploading');
+            zone.classList.add('done');
+            if (opts.onDone) opts.onDone(urls);
+            // 3秒后重置状态
+            setTimeout(() => {
+                zone.classList.remove('done');
+                idle.style.display = 'flex';
+                doneEl.style.display = 'none';
+                fill.style.width = '0%';
+            }, 3000);
+        } catch (e) {
+            progress.style.display = 'none';
+            idle.style.display = 'flex';
+            zone.classList.remove('uploading');
+            alert('上传失败：' + e.message + '\n\n请检查 Cloudinary Upload Preset "' + UPLOAD_PRESET + '" 是否设为 Unsigned。');
+        }
+    }
+
+    // 点击选文件
+    zone.addEventListener('click', e => { if (!zone.classList.contains('uploading')) input.click(); });
+    input.addEventListener('change', e => handleFiles(e.target.files));
+    input.addEventListener('click', e => e.stopPropagation());
+
+    // 拖拽
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', e => { if (!zone.contains(e.relatedTarget)) zone.classList.remove('drag-over'); });
+    zone.addEventListener('drop', e => {
+        e.preventDefault(); zone.classList.remove('drag-over');
+        handleFiles(e.dataTransfer.files);
+    });
+
+    // 粘贴（Ctrl+V）
+    document.addEventListener('paste', e => {
+        if (!document.body.contains(zone)) return;
+        const files = Array.from(e.clipboardData?.files || []).filter(f => f.type.startsWith('image/'));
+        if (files.length) handleFiles(files);
+    });
 }
-// 单图上传（兼容旧调用）
+
+// 兼容旧调用：弹出文件选择器，单图上传
 function openCldUpload(cb, opts = {}) {
-    if (typeof cloudinary === 'undefined') { alert('Cloudinary 未加载'); return; }
-    const w = _getCldWidget(!!opts.multiple);
-    if (!w) return;
-    w._cb = (urls, infos) => urls.forEach((url, i) => cb(url, infos[i]));
-    w.open();
-}
-// 批量上传：关闭 widget 后一次性回调所有 url
-function openCldBatchUpload(cb) {
-    if (typeof cloudinary === 'undefined') { alert('Cloudinary 未加载'); return; }
-    const w = _getCldWidget(true);
-    if (!w) return;
-    w._cb = (urls) => cb(urls);
-    w.open();
+    const multi = !!opts.multiple;
+    const input = document.createElement('input');
+    input.type = 'file'; input.accept = 'image/*';
+    if (multi) input.multiple = true;
+    input.style.display = 'none';
+    document.body.appendChild(input);
+    input.addEventListener('change', async () => {
+        if (!input.files.length) { input.remove(); return; }
+        try {
+            const urls = await uploadFiles(input.files);
+            urls.forEach(url => cb(url, { secure_url: url }));
+        } catch (e) {
+            alert('上传失败：' + e.message);
+        }
+        input.remove();
+    });
+    input.click();
 }
 
 /* DATA */
@@ -247,36 +353,37 @@ function openDet(shoot){
 
     function renderDetGal(s){
         const gi=s.galleryImages||[];
-        const uploadBtn=isAdmin
-            ?'<button class="det-upload-btn" id="detUploadBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>上传照片</button>'
-            :'';
+        const adminZoneHtml=isAdmin?'<div class="det-admin-dropzone" id="detDropZoneWrap"></div>':'';
         const countBadge=gi.length?'<span>'+gi.length+' '+t('photos')+'</span>':'';
         if(gi.length){
-            gal.innerHTML='<div class="det-gallery-head"><h3>'+t('galleryTitle')+'</h3><div class="det-gallery-head-right">'+countBadge+uploadBtn+'</div></div>'
-                +'<div class="det-gallery-grid">'+gi.map((url,i)=>'<div class="det-gal-item" data-idx="'+i+'"><img src="'+url+'" alt="" loading="lazy"></div>').join('')+'</div>';
+            gal.innerHTML='<div class="det-gallery-head"><h3>'+t('galleryTitle')+'</h3><div class="det-gallery-head-right">'+countBadge+'</div></div>'
+                +'<div class="det-gallery-grid">'+gi.map((url,i)=>'<div class="det-gal-item" data-idx="'+i+'"><img src="'+url+'" alt="" loading="lazy"></div>').join('')+'</div>'
+                +adminZoneHtml;
             requestAnimationFrame(()=>{
                 const items=gal.querySelectorAll('.det-gal-item');
-                items.forEach((item,i)=>{
-                    setTimeout(()=>item.classList.add('vis'),600+i*60);
-                    item.addEventListener('click',()=>openLB(gi,i));
-                });
+                items.forEach((item,i)=>{setTimeout(()=>item.classList.add('vis'),500+i*55);item.addEventListener('click',()=>openLB(gi,i))});
             });
         }else{
-            gal.innerHTML='<div class="det-gallery-head"><h3>'+t('galleryTitle')+'</h3><div class="det-gallery-head-right">'+uploadBtn+'</div></div>'
-                +'<div class="det-gallery-empty">'+t('noGallery')+'</div>';
+            gal.innerHTML='<div class="det-gallery-head"><h3>'+t('galleryTitle')+'</h3></div>'
+                +'<div class="det-gallery-empty">'+t('noGallery')+'</div>'
+                +adminZoneHtml;
         }
         if(isAdmin){
-            const btn=gal.querySelector('#detUploadBtn');
-            if(btn)btn.addEventListener('click',()=>{
-                openCldBatchUpload(urls=>{
-                    if(!urls||!urls.length)return;
-                    SHOOTS=SHOOTS.map(sh=>sh.slug===s.slug?{...sh,galleryImages:[...(sh.galleryImages||[]),...urls]}:sh);
-                    saveShoots();
-                    const updated=shootBySlug(s.slug);
-                    if(updated){shoot.galleryImages=updated.galleryImages;renderDetGal(updated);}
-                    refreshSite();
+            const wrap=gal.querySelector('#detDropZoneWrap');
+            if(wrap){
+                wrap.id='detDropZoneWrap_'+s.slug;
+                makeDragZone(wrap,{
+                    multiple:true,
+                    label:'拖拽照片到此处上传，或点击选择',
+                    onDone:urls=>{
+                        SHOOTS=SHOOTS.map(sh=>sh.slug===s.slug?{...sh,galleryImages:[...(sh.galleryImages||[]),...urls]}:sh);
+                        saveShoots();
+                        const updated=shootBySlug(s.slug);
+                        if(updated){shoot.galleryImages=updated.galleryImages;renderDetGal(updated);}
+                        refreshSite();
+                    }
                 });
-            });
+            }
         }
     }
 
@@ -411,7 +518,7 @@ document.getElementById('editCoverArea').addEventListener('click',()=>openCldUpl
 document.getElementById('editUploadBtn').addEventListener('click',()=>openCldUpload(url=>{document.getElementById('editCoverInput').value=url;document.getElementById('editCoverImg').src=url;document.getElementById('coverEmpty').style.display='none'}));
 document.getElementById('editUrlToggle').addEventListener('click',()=>{const g=document.getElementById('coverUrlGroup');g.style.display=g.style.display==='none'?'block':'none';if(g.style.display==='block')document.getElementById('editCoverInput').focus()});
 document.getElementById('editCoverInput').addEventListener('change',function(){document.getElementById('editCoverImg').src=this.value||DEFAULT_COVER;document.getElementById('coverEmpty').style.display=this.value?'none':'flex'});
-document.getElementById('editGalleryAddBtn').addEventListener('click',()=>openCldBatchUpload(urls=>{urls.forEach(url=>editGalleryImages.push(url));renderEditGallery()}));
+document.getElementById('editGalleryAddBtn').addEventListener('click',()=>openCldUpload(url=>{editGalleryImages.push(url);renderEditGallery()},{multiple:true}));
 document.getElementById('editCancelBtn').addEventListener('click',()=>document.getElementById('editOverlay').classList.remove('active'));
 document.getElementById('editOverlay').addEventListener('click',e=>{if(e.target.id==='editOverlay')document.getElementById('editOverlay').classList.remove('active')});
 
@@ -544,6 +651,30 @@ function renderNaPhotosGrid(s){
     const grid=document.getElementById('naPhotosGrid');
     grid.innerHTML=imgs.map((url,i)=>'<div class="na-photo-item'+(naSelectedPhotos.has(i)?' selected':'')+'" data-idx="'+i+'"><img src="'+url+'" alt="" loading="lazy"><div class="na-photo-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div></div>').join('');
     grid.querySelectorAll('.na-photo-item').forEach(item=>{item.addEventListener('click',()=>toggleNaPhoto(+item.dataset.idx,s))});
+    // 拖拽上传到照片网格区域
+    if(!grid._dropBound){
+        grid._dropBound=true;
+        grid.addEventListener('dragover',e=>{e.preventDefault();grid.classList.add('na-grid-dragover')});
+        grid.addEventListener('dragleave',e=>{if(!grid.contains(e.relatedTarget))grid.classList.remove('na-grid-dragover')});
+        grid.addEventListener('drop',async e=>{
+            e.preventDefault();grid.classList.remove('na-grid-dragover');
+            const files=Array.from(e.dataTransfer.files).filter(f=>f.type.startsWith('image/')||f.name.match(/\.(heic|heif)$/i));
+            if(!files.length)return;
+            const btn=document.getElementById('naBatchUpload');
+            btn.textContent='上传中...';btn.disabled=true;
+            try{
+                const urls=await uploadFiles(files,(done,total)=>{btn.textContent=`上传 ${done}/${total}...`});
+                SHOOTS=SHOOTS.map(sh=>sh.slug===s.slug?{...sh,galleryImages:[...(sh.galleryImages||[]),...urls]}:sh);
+                saveShoots();
+                const updated=shootBySlug(s.slug);
+                if(updated)renderNaPhotosGrid(updated);
+                document.getElementById('naPhotosCount').textContent=(shootBySlug(s.slug)?.galleryImages||[]).length+' 张';
+                refreshSite();
+            }catch(ex){alert('上传失败：'+ex.message);}
+            btn.innerHTML='<svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>批量上传照片';
+            btn.disabled=false;
+        });
+    }
 }
 function toggleNaPhoto(idx,s){
     if(naSelectedPhotos.has(idx))naSelectedPhotos.delete(idx);else naSelectedPhotos.add(idx);
@@ -577,14 +708,26 @@ document.getElementById('naSaveMeta').addEventListener('click',()=>{
 });
 document.getElementById('naBatchUpload').addEventListener('click',()=>{
     if(!naCurrentSlug){alert('请先选择相册');return}
-    openCldBatchUpload(urls=>{
-        if(!urls||!urls.length)return;
-        SHOOTS=SHOOTS.map(s=>s.slug===naCurrentSlug?{...s,galleryImages:[...(s.galleryImages||[]),...urls]}:s);
-        saveShoots();
-        const s=shootBySlug(naCurrentSlug);
-        if(s){renderNaPhotosGrid(s);document.getElementById('naPhotosCount').textContent=(s.galleryImages||[]).length+' 张';}
-        refreshSite();
+    // 使用 file input 直接上传
+    const input=document.createElement('input');
+    input.type='file';input.accept='image/*';input.multiple=true;
+    input.style.display='none';document.body.appendChild(input);
+    input.addEventListener('change',async()=>{
+        if(!input.files.length){input.remove();return}
+        const btn=document.getElementById('naBatchUpload');
+        btn.textContent='上传中...';btn.disabled=true;
+        try{
+            const urls=await uploadFiles(input.files,(done,total)=>{btn.textContent=`上传 ${done}/${total}...`});
+            SHOOTS=SHOOTS.map(s=>s.slug===naCurrentSlug?{...s,galleryImages:[...(s.galleryImages||[]),...urls]}:s);
+            saveShoots();
+            const s=shootBySlug(naCurrentSlug);
+            if(s){renderNaPhotosGrid(s);document.getElementById('naPhotosCount').textContent=(s.galleryImages||[]).length+' 张';}
+            refreshSite();
+        }catch(e){alert('上传失败：'+e.message);}
+        btn.innerHTML='<svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>批量上传照片';
+        btn.disabled=false;input.remove();
     });
+    input.click();
 });
 document.getElementById('naBatchDelPhotos').addEventListener('click',()=>{
     if(!naCurrentSlug||naSelectedPhotos.size===0)return;
@@ -608,68 +751,6 @@ function renderNaSlidesBody(){
 }
 document.getElementById('naNewSlide').addEventListener('click',()=>openSlideEdit(null));
 
-/* ===== 关于我 (ABOUT ME) ===== */
-const ABOUT_KEY = 'photo_gallery_about';
-function loadAbout() { return readStore(ABOUT_KEY, { name:'', role:'', bio:'', instagram:'', email:'', avatar:'' }); }
-function saveAbout(data) { writeStore(ABOUT_KEY, data); }
-
-function initAboutPanel() {
-    const a = loadAbout();
-    const img = document.getElementById('naAboutAvatarImg');
-    if (img) { img.src = a.avatar || DEFAULT_COVER; }
-    const fields = { naAboutName:'name', naAboutRole:'role', naAboutBio:'bio', naAboutInstagram:'instagram', naAboutEmail:'email' };
-    Object.entries(fields).forEach(([id, key]) => { const el=document.getElementById(id); if(el) el.value = a[key]||''; });
-}
-
-function bindAboutPanel() {
-    const avatarWrap = document.getElementById('naAboutAvatarWrap');
-    const avatarBtn = document.getElementById('naAboutUploadAvatar');
-    const uploadAvatar = () => openCldUpload(url => {
-        document.getElementById('naAboutAvatarImg').src = url;
-        document.getElementById('naAboutAvatarImg').dataset.pendingUrl = url;
-    });
-    if (avatarWrap) avatarWrap.addEventListener('click', uploadAvatar);
-    if (avatarBtn) avatarBtn.addEventListener('click', e => { e.stopPropagation(); uploadAvatar(); });
-
-    const saveBtn = document.getElementById('naSaveAbout');
-    if (saveBtn) saveBtn.addEventListener('click', () => {
-        const img = document.getElementById('naAboutAvatarImg');
-        const data = {
-            avatar: img.dataset.pendingUrl || img.src || loadAbout().avatar,
-            name: document.getElementById('naAboutName').value.trim(),
-            role: document.getElementById('naAboutRole').value.trim(),
-            bio: document.getElementById('naAboutBio').value.trim(),
-            instagram: document.getElementById('naAboutInstagram').value.trim(),
-            email: document.getElementById('naAboutEmail').value.trim(),
-        };
-        saveAbout(data);
-        const hint = document.getElementById('naAboutSaveHint');
-        if (hint) { hint.textContent = '✓ 已保存'; hint.style.color = 'var(--success)'; setTimeout(() => hint.textContent = '', 2000); }
-        // Update footer Instagram link if provided
-        if (data.instagram) { const a = document.querySelector('.site-footer a'); if(a) a.href = data.instagram; }
-    });
-}
-
-// Extend openNewAdminPanel to init about tab
-const _origOpenNewAdminPanel = openNewAdminPanel;
-// Patch: bind about panel after DOM ready, once
-let _aboutBound = false;
-function ensureAboutBound() {
-    if (_aboutBound) return; _aboutBound = true;
-    bindAboutPanel();
-}
-
-/* ===== INIT ===== */
+/* INIT */
 checkSession();
 refreshSite();
-// 预热 Cloudinary widget，消除首次点击延迟
-if(typeof cloudinary!=='undefined'){prewarmCldWidgets()}else{window.addEventListener('load',()=>setTimeout(prewarmCldWidgets,800))}
-// 绑定关于我面板
-ensureAboutBound();
-
-// 打开关于我 Tab 时刷新数据
-document.querySelectorAll('.new-admin-tab[data-tab="about"]').forEach(tab => {
-    tab.addEventListener('click', () => initAboutPanel());
-});
-// 预热 Cloudinary widget，消除首次点击延迟
-if(typeof cloudinary!=='undefined'){prewarmCldWidgets()}else{window.addEventListener('load',()=>setTimeout(prewarmCldWidgets,800))}
