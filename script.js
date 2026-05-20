@@ -1,5 +1,5 @@
 const CLOUD_NAME='das8chiyz';
-const UPLOAD_PRESET='my photo';
+const UPLOAD_PRESET='photowebsite';
 const ADMIN_EMAILS=['greencucumbertube@gmail.com'];
 const STORAGE_KEYS={shoots:'photo_gallery_shoots',slides:'photo_gallery_home_slides',users:'photo_gallery_users',session:'photo_gallery_session'};
 const LEGACY_SUPABASE_URL='https://ohxezoxiuxbqrzfomdyt.supabase.co';
