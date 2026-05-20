@@ -125,6 +125,7 @@
         <div class="new-admin-tabs">
             <button class="new-admin-tab active" data-tab="albums">相册管理</button>
             <button class="new-admin-tab" data-tab="slides">首页幻灯片</button>
+            <button class="new-admin-tab" data-tab="about">关于我</button>
         </div>
         <button class="new-admin-close" id="newAdminClose">
             <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -227,6 +228,58 @@
             </div>
         </div>
         <div class="na-slides-body" id="naSlidesBody"></div>
+    </div>
+
+    <!-- 关于我面板 -->
+    <div class="new-admin-panel" id="tab-about">
+        <div class="new-admin-toolbar">
+            <div class="new-admin-toolbar-left">
+                <span style="font-family:'DM Mono',monospace;font-size:.7rem;color:var(--text-secondary)">编辑关于我页面的内容与头像</span>
+            </div>
+            <div class="new-admin-toolbar-right">
+                <button class="na-btn primary" id="naSaveAbout">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                    保存
+                </button>
+            </div>
+        </div>
+        <div class="na-about-body">
+            <div class="na-about-avatar-col">
+                <div class="na-about-avatar-wrap" id="naAboutAvatarWrap">
+                    <img id="naAboutAvatarImg" src="" alt="">
+                    <div class="na-about-avatar-overlay">
+                        <button class="na-cover-btn" id="naAboutUploadAvatar">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                            更换头像
+                        </button>
+                    </div>
+                </div>
+                <div class="na-about-avatar-hint">点击图片更换头像</div>
+            </div>
+            <div class="na-about-form-col">
+                <div class="na-meta-group">
+                    <label>姓名 / Name</label>
+                    <input class="na-meta-input" id="naAboutName" placeholder="你的名字">
+                </div>
+                <div class="na-meta-group">
+                    <label>职业标签</label>
+                    <input class="na-meta-input" id="naAboutRole" placeholder="摄影师 · 记录者 · 光的追随者">
+                </div>
+                <div class="na-meta-group">
+                    <label>个人简介</label>
+                    <textarea class="na-meta-input" id="naAboutBio" rows="5" placeholder="写下关于你的故事..."></textarea>
+                </div>
+                <div class="na-meta-group">
+                    <label>Instagram 链接</label>
+                    <input class="na-meta-input" id="naAboutInstagram" type="url" placeholder="https://instagram.com/...">
+                </div>
+                <div class="na-meta-group">
+                    <label>联系邮箱</label>
+                    <input class="na-meta-input" id="naAboutEmail" type="email" placeholder="hello@example.com">
+                </div>
+                <div class="na-about-save-hint" id="naAboutSaveHint"></div>
+            </div>
+        </div>
     </div>
 </div>
 
