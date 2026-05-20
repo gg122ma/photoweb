@@ -110,8 +110,63 @@ const pm=document.getElementById('profileMenu');if(pm){const adminItem=pm.queryS
 if(currentUser){const pb=document.getElementById('profileBtn');if(pb)pb.addEventListener('click',e=>{e.stopPropagation();document.getElementById('profileMenu').classList.toggle('open')})}else{const lb=document.getElementById('loginBtn');if(lb)lb.addEventListener('click',()=>openAuth('login'))}
 const pmMe=document.getElementById('profileMenuMe');if(pmMe)pmMe.onclick=()=>{document.getElementById('profileMenu').classList.remove('open');openProfilePage()};const pmAdmin=document.getElementById('profileMenuAdmin');if(pmAdmin)pmAdmin.onclick=()=>{document.getElementById('profileMenu').classList.remove('open');openNewAdminPanel()};updateAdminFab()}
 
-/* CLOUDINARY */
-function openCldUpload(cb,opts={}){if(typeof cloudinary==='undefined'){alert('Cloudinary not loaded');return}cloudinary.createUploadWidget({cloudName:CLOUD_NAME,uploadPreset:UPLOAD_PRESET,sources:['local','url'],multiple:!!opts.multiple,resourceType:'image',folder:'gallery',cropping:false,showAdvancedOptions:false},(err,res)=>{if(!err&&res&&res.event==='success')cb(res.info.secure_url,res.info)}).open()}
+/* CLOUDINARY — 预缓存 widget，点击即开（消除延迟），批量收集上传结果 */
+const _cldCache = {};
+
+function _makeCldWidget(multi) {
+    if (typeof cloudinary === 'undefined') return null;
+    let _pending = [];
+    const w = cloudinary.createUploadWidget({
+        cloudName: CLOUD_NAME, uploadPreset: UPLOAD_PRESET,
+        sources: ['local', 'url'], multiple: !!multi,
+        resourceType: 'image', folder: 'gallery',
+        cropping: false, showAdvancedOptions: false
+    }, (err, res) => {
+        if (!err && res) {
+            if (res.event === 'success') {
+                _pending.push({ url: res.info.secure_url, info: res.info });
+            }
+            if (res.event === 'close') {
+                if (_pending.length && w._cb) {
+                    w._cb(_pending.map(x => x.url), _pending.map(x => x.info));
+                }
+                _pending = []; w._cb = null;
+            }
+        }
+    });
+    return w;
+}
+
+function _getCldWidget(multi) {
+    const key = multi ? 'multi' : 'single';
+    if (!_cldCache[key]) _cldCache[key] = _makeCldWidget(multi);
+    return _cldCache[key];
+}
+
+// 页面加载后预热两个 widget，消除首次点击时 SDK 初始化延迟
+function prewarmCldWidgets() {
+    if (typeof cloudinary === 'undefined') return;
+    _getCldWidget(false);
+    _getCldWidget(true);
+}
+
+// 兼容旧调用 cb(url, info)，多图时逐张回调
+function openCldUpload(cb, opts = {}) {
+    if (typeof cloudinary === 'undefined') { alert('Cloudinary not loaded'); return; }
+    const w = _getCldWidget(!!opts.multiple);
+    if (!w) return;
+    w._cb = (urls, infos) => urls.forEach((url, i) => cb(url, infos[i]));
+    w.open();
+}
+
+// 批量上传专用：关闭 widget 后一次性回调全部 url 数组
+function openCldBatchUpload(cb) {
+    if (typeof cloudinary === 'undefined') { alert('Cloudinary not loaded'); return; }
+    const w = _getCldWidget(true);
+    if (!w) return;
+    w._cb = (urls) => cb(urls);
+    w.open();
+}
 
 /* DATA */
 function parseGalleryImages(value){if(Array.isArray(value))return value;if(!value)return[];try{return JSON.parse(value)}catch(e){return[]}}
@@ -198,16 +253,40 @@ function openDet(shoot){
     const driveBtn=document.getElementById('detDriveBtn');
     if(shoot.drive){driveBtn.href=shoot.drive;driveBtn.style.display=''}else driveBtn.style.display='none';
     const gal=document.getElementById('detGallery');
-    const gi=shoot.galleryImages||[];
-    if(gi.length){
-        gal.innerHTML='<div class="det-gallery-head"><h3>'+t('galleryTitle')+'</h3><span>'+gi.length+' '+t('photos')+'</span></div><div class="det-gallery-grid">'+gi.map((url,i)=>'<div class="det-gal-item" data-idx="'+i+'"><img src="'+url+'" alt="" loading="lazy"></div>').join('')+'</div>';
-        requestAnimationFrame(()=>{
-            const items=gal.querySelectorAll('.det-gal-item');
-            items.forEach((item,i)=>{setTimeout(()=>item.classList.add('vis'),800+i*80);item.addEventListener('click',()=>openLB(gi,i))})
-        })
-    }else{
-        gal.innerHTML='<div class="det-gallery-head"><h3>'+t('galleryTitle')+'</h3></div><div class="det-gallery-empty">'+t('noGallery')+'</div>'
+
+    function renderDetGal(s){
+        const gi=s.galleryImages||[];
+        const uploadBtn=isAdmin
+            ?'<button class="det-upload-btn" id="detUploadBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>批量上传照片</button>'
+            :'';
+        const countBadge=gi.length?'<span>'+gi.length+' '+t('photos')+'</span>':'';
+        if(gi.length){
+            gal.innerHTML='<div class="det-gallery-head"><h3>'+t('galleryTitle')+'</h3><div class="det-gallery-head-right">'+countBadge+uploadBtn+'</div></div>'
+                +'<div class="det-gallery-grid">'+gi.map((url,i)=>'<div class="det-gal-item" data-idx="'+i+'"><img src="'+url+'" alt="" loading="lazy"></div>').join('')+'</div>';
+            requestAnimationFrame(()=>{
+                const items=gal.querySelectorAll('.det-gal-item');
+                items.forEach((item,i)=>{setTimeout(()=>item.classList.add('vis'),800+i*80);item.addEventListener('click',()=>openLB(gi,i))});
+            });
+        }else{
+            gal.innerHTML='<div class="det-gallery-head"><h3>'+t('galleryTitle')+'</h3><div class="det-gallery-head-right">'+uploadBtn+'</div></div>'
+                +'<div class="det-gallery-empty">'+t('noGallery')+'</div>';
+        }
+        if(isAdmin){
+            const btn=gal.querySelector('#detUploadBtn');
+            if(btn)btn.addEventListener('click',()=>{
+                openCldBatchUpload(urls=>{
+                    if(!urls||!urls.length)return;
+                    SHOOTS=SHOOTS.map(sh=>sh.slug===s.slug?{...sh,galleryImages:[...(sh.galleryImages||[]),...urls]}:sh);
+                    saveShoots();
+                    const updated=shootBySlug(s.slug);
+                    if(updated){shoot.galleryImages=updated.galleryImages;renderDetGal(updated);}
+                    refreshSite();
+                });
+            });
+        }
     }
+
+    renderDetGal(shoot);
     detOverlay.classList.add('open');document.body.style.overflow='hidden'
 }
 
@@ -338,7 +417,7 @@ document.getElementById('editCoverArea').addEventListener('click',()=>openCldUpl
 document.getElementById('editUploadBtn').addEventListener('click',()=>openCldUpload(url=>{document.getElementById('editCoverInput').value=url;document.getElementById('editCoverImg').src=url;document.getElementById('coverEmpty').style.display='none'}));
 document.getElementById('editUrlToggle').addEventListener('click',()=>{const g=document.getElementById('coverUrlGroup');g.style.display=g.style.display==='none'?'block':'none';if(g.style.display==='block')document.getElementById('editCoverInput').focus()});
 document.getElementById('editCoverInput').addEventListener('change',function(){document.getElementById('editCoverImg').src=this.value||DEFAULT_COVER;document.getElementById('coverEmpty').style.display=this.value?'none':'flex'});
-document.getElementById('editGalleryAddBtn').addEventListener('click',()=>openCldUpload(url=>{editGalleryImages.push(url);renderEditGallery()},{multiple:true}));
+document.getElementById('editGalleryAddBtn').addEventListener('click',()=>openCldBatchUpload(urls=>{urls.forEach(url=>editGalleryImages.push(url));renderEditGallery()}));
 document.getElementById('editCancelBtn').addEventListener('click',()=>document.getElementById('editOverlay').classList.remove('active'));
 document.getElementById('editOverlay').addEventListener('click',e=>{if(e.target.id==='editOverlay')document.getElementById('editOverlay').classList.remove('active')});
 
@@ -504,11 +583,14 @@ document.getElementById('naSaveMeta').addEventListener('click',()=>{
 });
 document.getElementById('naBatchUpload').addEventListener('click',()=>{
     if(!naCurrentSlug){alert('请先选择相册');return}
-    openCldUpload(url=>{
-        SHOOTS=SHOOTS.map(s=>s.slug===naCurrentSlug?{...s,galleryImages:[...(s.galleryImages||[]),url]}:s);
-        saveShoots();const s=shootBySlug(naCurrentSlug);if(s)renderNaPhotosGrid(s);refreshSite();
-        document.getElementById('naPhotosCount').textContent=(shootBySlug(naCurrentSlug)?.galleryImages||[]).length+' 张';
-    },{multiple:true});
+    openCldBatchUpload(urls=>{
+        if(!urls||!urls.length)return;
+        SHOOTS=SHOOTS.map(s=>s.slug===naCurrentSlug?{...s,galleryImages:[...(s.galleryImages||[]),...urls]}:s);
+        saveShoots();
+        const s=shootBySlug(naCurrentSlug);
+        if(s){renderNaPhotosGrid(s);document.getElementById('naPhotosCount').textContent=(s.galleryImages||[]).length+' 张';}
+        refreshSite();
+    });
 });
 document.getElementById('naBatchDelPhotos').addEventListener('click',()=>{
     if(!naCurrentSlug||naSelectedPhotos.size===0)return;
@@ -535,3 +617,5 @@ document.getElementById('naNewSlide').addEventListener('click',()=>openSlideEdit
 /* INIT */
 checkSession();
 refreshSite();
+// 预热 Cloudinary widget，消除首次点击延迟
+if(typeof cloudinary!=='undefined'){prewarmCldWidgets()}else{window.addEventListener('load',()=>setTimeout(prewarmCldWidgets,800))}
