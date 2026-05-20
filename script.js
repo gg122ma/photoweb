@@ -1,5 +1,5 @@
 const CLOUD_NAME='das8chiyz';
-const UPLOAD_PRESET='my photo';
+const UPLOAD_PRESET='my_photo';
 const ADMIN_EMAILS=['greencucumbertube@gmail.com'];
 const STORAGE_KEYS={shoots:'photo_gallery_shoots',slides:'photo_gallery_home_slides',users:'photo_gallery_users',session:'photo_gallery_session'};
 const LEGACY_SUPABASE_URL='https://ohxezoxiuxbqrzfomdyt.supabase.co';
@@ -110,166 +110,23 @@ const pm=document.getElementById('profileMenu');if(pm){const adminItem=pm.queryS
 if(currentUser){const pb=document.getElementById('profileBtn');if(pb)pb.addEventListener('click',e=>{e.stopPropagation();document.getElementById('profileMenu').classList.toggle('open')})}else{const lb=document.getElementById('loginBtn');if(lb)lb.addEventListener('click',()=>openAuth('login'))}
 const pmMe=document.getElementById('profileMenuMe');if(pmMe)pmMe.onclick=()=>{document.getElementById('profileMenu').classList.remove('open');openProfilePage()};const pmAdmin=document.getElementById('profileMenuAdmin');if(pmAdmin)pmAdmin.onclick=()=>{document.getElementById('profileMenu').classList.remove('open');openNewAdminPanel()};updateAdminFab()}
 
-/* ============================================================
-   CLOUDINARY 直传系统
-   - 绕过 widget，直接用 Fetch 上传到 /upload API
-   - 支持拖拽、粘贴、点击选文件，批量并行上传
-   - 不依赖 Upload Preset 配置（使用 unsigned 直传）
-   ============================================================ */
-
-async function uploadFileToCloudinary(file) {
-    const fd = new FormData();
-    fd.append('file', file);
-    fd.append('upload_preset', UPLOAD_PRESET);
-    fd.append('folder', 'gallery');
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
-        method: 'POST', body: fd
-    });
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error?.message || `Upload failed: ${res.status}`);
-    }
-    const data = await res.json();
-    return data.secure_url;
-}
-
-// 批量上传多个文件，返回 url 数组，带进度回调
-async function uploadFiles(files, onProgress) {
-    const urls = [];
-    let done = 0;
-    const total = files.length;
-    const tasks = Array.from(files).map(async file => {
-        const url = await uploadFileToCloudinary(file);
-        urls.push(url);
-        done++;
-        if (onProgress) onProgress(done, total);
-        return url;
-    });
-    await Promise.all(tasks);
-    return urls;
-}
-
-// 创建拖拽上传区域，挂载到指定元素
-// opts: { multiple, onDone(urls), label }
-function makeDragZone(container, opts = {}) {
-    const multi = opts.multiple !== false;
-    const label = opts.label || (multi ? '拖拽照片到此处，或点击选择' : '拖拽图片到此处，或点击选择');
-
-    container.innerHTML = `
-        <div class="drag-zone" id="dz_${container.id}">
-            <input type="file" accept="image/*" ${multi ? 'multiple' : ''} class="dz-input">
-            <div class="dz-idle">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-                    <polyline points="17 8 12 3 7 8"/>
-                    <line x1="12" y1="3" x2="12" y2="15"/>
-                </svg>
-                <span>${label}</span>
-                <em>支持 JPG · PNG · WEBP · HEIC 原图</em>
-            </div>
-            <div class="dz-progress" style="display:none">
-                <div class="dz-progress-bar"><div class="dz-progress-fill"></div></div>
-                <div class="dz-progress-text">准备上传...</div>
-            </div>
-            <div class="dz-done" style="display:none">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-                <span class="dz-done-text"></span>
-            </div>
-        </div>`;
-
-    const zone = container.querySelector('.drag-zone');
-    const input = zone.querySelector('.dz-input');
-    const idle = zone.querySelector('.dz-idle');
-    const progress = zone.querySelector('.dz-progress');
-    const fill = zone.querySelector('.dz-progress-fill');
-    const progressText = zone.querySelector('.dz-progress-text');
-    const doneEl = zone.querySelector('.dz-done');
-    const doneText = zone.querySelector('.dz-done-text');
-
-    async function handleFiles(files) {
-        if (!files || !files.length) return;
-        const validFiles = Array.from(files).filter(f => f.type.startsWith('image/') || f.name.match(/\.(heic|heif)$/i));
-        if (!validFiles.length) { alert('请选择图片文件'); return; }
-
-        idle.style.display = 'none';
-        progress.style.display = 'flex';
-        doneEl.style.display = 'none';
-        zone.classList.add('uploading');
-
-        try {
-            const urls = await uploadFiles(validFiles, (done, total) => {
-                const pct = Math.round(done / total * 100);
-                fill.style.width = pct + '%';
-                progressText.textContent = `已上传 ${done} / ${total} 张...`;
-            });
-            progress.style.display = 'none';
-            doneEl.style.display = 'flex';
-            doneText.textContent = `✓ ${urls.length} 张上传完成`;
-            zone.classList.remove('uploading');
-            zone.classList.add('done');
-            if (opts.onDone) opts.onDone(urls);
-            // 3秒后重置状态
-            setTimeout(() => {
-                zone.classList.remove('done');
-                idle.style.display = 'flex';
-                doneEl.style.display = 'none';
-                fill.style.width = '0%';
-            }, 3000);
-        } catch (e) {
-            progress.style.display = 'none';
-            idle.style.display = 'flex';
-            zone.classList.remove('uploading');
-            alert('上传失败：' + e.message + '\n\n请检查 Cloudinary Upload Preset "' + UPLOAD_PRESET + '" 是否设为 Unsigned。');
-        }
-    }
-
-    // 点击选文件
-    zone.addEventListener('click', e => { if (!zone.classList.contains('uploading')) input.click(); });
-    input.addEventListener('change', e => handleFiles(e.target.files));
-    input.addEventListener('click', e => e.stopPropagation());
-
-    // 拖拽
-    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
-    zone.addEventListener('dragleave', e => { if (!zone.contains(e.relatedTarget)) zone.classList.remove('drag-over'); });
-    zone.addEventListener('drop', e => {
-        e.preventDefault(); zone.classList.remove('drag-over');
-        handleFiles(e.dataTransfer.files);
-    });
-
-    // 粘贴（Ctrl+V）
-    document.addEventListener('paste', e => {
-        if (!document.body.contains(zone)) return;
-        const files = Array.from(e.clipboardData?.files || []).filter(f => f.type.startsWith('image/'));
-        if (files.length) handleFiles(files);
-    });
-}
-
-// 兼容旧调用：弹出文件选择器，单图上传
-function openCldUpload(cb, opts = {}) {
-    const multi = !!opts.multiple;
-    const input = document.createElement('input');
-    input.type = 'file'; input.accept = 'image/*';
-    if (multi) input.multiple = true;
-    input.style.display = 'none';
-    document.body.appendChild(input);
-    input.addEventListener('change', async () => {
-        if (!input.files.length) { input.remove(); return; }
-        try {
-            const urls = await uploadFiles(input.files);
-            urls.forEach(url => cb(url, { secure_url: url }));
-        } catch (e) {
-            alert('上传失败：' + e.message);
-        }
-        input.remove();
-    });
-    input.click();
-}
+/* CLOUDINARY */
+function openCldUpload(cb,opts={}){if(typeof cloudinary==='undefined'){alert('Cloudinary not loaded');return}cloudinary.createUploadWidget({cloudName:CLOUD_NAME,uploadPreset:UPLOAD_PRESET,sources:['local','url'],multiple:!!opts.multiple,resourceType:'image',folder:'gallery',cropping:false,showAdvancedOptions:false},(err,res)=>{if(!err&&res&&res.event==='success')cb(res.info.secure_url,res.info)}).open()}
 
 /* DATA */
 function parseGalleryImages(value){if(Array.isArray(value))return value;if(!value)return[];try{return JSON.parse(value)}catch(e){return[]}}
 async function fetchLegacyTable(table,query){const res=await fetch(LEGACY_SUPABASE_URL+'/rest/v1/'+table+'?'+query,{headers:{apikey:LEGACY_SUPABASE_KEY,Authorization:'Bearer '+LEGACY_SUPABASE_KEY}});if(!res.ok)throw new Error('Legacy data import failed: '+table);return res.json()}
 async function importLegacyShootsIfEmpty(){const rows=readStore(STORAGE_KEYS.shoots,[]);if(rows.length)return;try{const data=await fetchLegacyTable('shoots','select=*&order=shoot_date.desc');if(!Array.isArray(data)||!data.length)return;writeStore(STORAGE_KEYS.shoots,data.map(s=>({id:s.id||s.slug,slug:s.slug,date:s.shoot_date,year:s.year_num,month:s.month_num,title:s.title||'',description:s.description||'',people:Array.isArray(s.people)?s.people:[],equipment:s.equipment||'',drive:s.drive_link||'',cover:s.cover_url||DEFAULT_COVER,galleryImages:parseGalleryImages(s.gallery_images)})))}catch(e){console.warn(e)}}
-async function importLegacySlidesIfEmpty(){const rows=readStore(STORAGE_KEYS.slides,[]);if(rows.length)return;try{const data=await fetchLegacyTable('home_slides','select=*&order=sort_order.asc');if(!Array.isArray(data)||!data.length)return;writeStore(STORAGE_KEYS.slides,data.map((s,i)=>({id:s.id||('slide-'+i),image_url:s.image_url,caption:s.caption||'',sub:s.sub||'',sort_order:s.sort_order||i})))}catch(e){console.warn(e)}}
+// 判断 URL 是否是无效占位符
+function isValidImageUrl(url){
+    if(!url||typeof url!=='string')return false;
+    if(url.includes('your-bucket.supabase.co'))return false;
+    if(url.includes('your-bucket'))return false;
+    if(url.startsWith('https://example'))return false;
+    if(url.length<10)return false;
+    return true;
+}
+async function importLegacySlidesIfEmpty(){const rows=readStore(STORAGE_KEYS.slides,[]);if(rows.length)return;try{const data=await fetchLegacyTable('home_slides','select=*&order=sort_order.asc');if(!Array.isArray(data)||!data.length)return;const valid=data.filter(s=>isValidImageUrl(s.image_url));if(!valid.length)return;writeStore(STORAGE_KEYS.slides,valid.map((s,i)=>({id:s.id||('slide-'+i),image_url:s.image_url,caption:s.caption||'',sub:s.sub||'',sort_order:s.sort_order||i})))}catch(e){console.warn(e)}}
 function normalizeShoot(s){const date=s.date||s.shoot_date||new Date().toISOString().slice(0,10),d=new Date(date);return{slug:s.slug,id:s.id||s.slug,date,year:s.year||s.year_num||d.getFullYear(),month:s.month||s.month_num||d.getMonth()+1,title:s.title||'',description:s.description||'',people:Array.isArray(s.people)?s.people:[],equipment:s.equipment||'',drive:s.drive||s.drive_link||'',cover:s.cover||s.cover_url||DEFAULT_COVER,images:[s.cover||s.cover_url||DEFAULT_IMAGE],galleryImages:parseGalleryImages(s.galleryImages||s.gallery_images),dateDisplay:fmtDate(date)}}
 function saveShoots(){writeStore(STORAGE_KEYS.shoots,SHOOTS.map(s=>({id:s.id,slug:s.slug,date:s.date,year:s.year,month:s.month,title:s.title,description:s.description,people:s.people,equipment:s.equipment,drive:s.drive,cover:s.cover,galleryImages:s.galleryImages})))}
 function loadData(){const rows=readStore(STORAGE_KEYS.shoots,[]);SHOOTS=rows.map(normalizeShoot).sort((a,b)=>new Date(b.date)-new Date(a.date));monthSet=new Set(SHOOTS.map(s=>s.year+'-'+s.month));buildNav()}
@@ -301,7 +158,10 @@ let HOME_SLIDES=[];
 function saveHomeSlides(){writeStore(STORAGE_KEYS.slides,HOME_SLIDES)}
 function loadHomeSlides(){
     const rows=readStore(STORAGE_KEYS.slides,[]);
-    HOME_SLIDES=rows.length?rows:SHOOTS.slice(0,5).map(s=>({id:'slide-'+s.slug,image_url:s.cover,caption:s.title,sub:''}));
+    // 过滤掉 your-bucket 等无效占位符 URL
+    const validRows=rows.filter(s=>isValidImageUrl(s.image_url));
+    if(validRows.length!==rows.length)writeStore(STORAGE_KEYS.slides,validRows); // 顺便清理存储
+    HOME_SLIDES=validRows.length?validRows:SHOOTS.slice(0,5).map(s=>({id:'slide-'+s.slug,image_url:s.cover,caption:s.title,sub:''}));
 }
 
 let sliderIdx=0,sliderTouchX=0;
@@ -350,44 +210,16 @@ function openDet(shoot){
     const driveBtn=document.getElementById('detDriveBtn');
     if(shoot.drive){driveBtn.href=shoot.drive;driveBtn.style.display=''}else driveBtn.style.display='none';
     const gal=document.getElementById('detGallery');
-
-    function renderDetGal(s){
-        const gi=s.galleryImages||[];
-        const adminZoneHtml=isAdmin?'<div class="det-admin-dropzone" id="detDropZoneWrap"></div>':'';
-        const countBadge=gi.length?'<span>'+gi.length+' '+t('photos')+'</span>':'';
-        if(gi.length){
-            gal.innerHTML='<div class="det-gallery-head"><h3>'+t('galleryTitle')+'</h3><div class="det-gallery-head-right">'+countBadge+'</div></div>'
-                +'<div class="det-gallery-grid">'+gi.map((url,i)=>'<div class="det-gal-item" data-idx="'+i+'"><img src="'+url+'" alt="" loading="lazy"></div>').join('')+'</div>'
-                +adminZoneHtml;
-            requestAnimationFrame(()=>{
-                const items=gal.querySelectorAll('.det-gal-item');
-                items.forEach((item,i)=>{setTimeout(()=>item.classList.add('vis'),500+i*55);item.addEventListener('click',()=>openLB(gi,i))});
-            });
-        }else{
-            gal.innerHTML='<div class="det-gallery-head"><h3>'+t('galleryTitle')+'</h3></div>'
-                +'<div class="det-gallery-empty">'+t('noGallery')+'</div>'
-                +adminZoneHtml;
-        }
-        if(isAdmin){
-            const wrap=gal.querySelector('#detDropZoneWrap');
-            if(wrap){
-                wrap.id='detDropZoneWrap_'+s.slug;
-                makeDragZone(wrap,{
-                    multiple:true,
-                    label:'拖拽照片到此处上传，或点击选择',
-                    onDone:urls=>{
-                        SHOOTS=SHOOTS.map(sh=>sh.slug===s.slug?{...sh,galleryImages:[...(sh.galleryImages||[]),...urls]}:sh);
-                        saveShoots();
-                        const updated=shootBySlug(s.slug);
-                        if(updated){shoot.galleryImages=updated.galleryImages;renderDetGal(updated);}
-                        refreshSite();
-                    }
-                });
-            }
-        }
+    const gi=shoot.galleryImages||[];
+    if(gi.length){
+        gal.innerHTML='<div class="det-gallery-head"><h3>'+t('galleryTitle')+'</h3><span>'+gi.length+' '+t('photos')+'</span></div><div class="det-gallery-grid">'+gi.map((url,i)=>'<div class="det-gal-item" data-idx="'+i+'"><img src="'+url+'" alt="" loading="lazy"></div>').join('')+'</div>';
+        requestAnimationFrame(()=>{
+            const items=gal.querySelectorAll('.det-gal-item');
+            items.forEach((item,i)=>{setTimeout(()=>item.classList.add('vis'),800+i*80);item.addEventListener('click',()=>openLB(gi,i))})
+        })
+    }else{
+        gal.innerHTML='<div class="det-gallery-head"><h3>'+t('galleryTitle')+'</h3></div><div class="det-gallery-empty">'+t('noGallery')+'</div>'
     }
-
-    renderDetGal(shoot);
     detOverlay.classList.add('open');document.body.style.overflow='hidden'
 }
 
@@ -651,30 +483,6 @@ function renderNaPhotosGrid(s){
     const grid=document.getElementById('naPhotosGrid');
     grid.innerHTML=imgs.map((url,i)=>'<div class="na-photo-item'+(naSelectedPhotos.has(i)?' selected':'')+'" data-idx="'+i+'"><img src="'+url+'" alt="" loading="lazy"><div class="na-photo-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div></div>').join('');
     grid.querySelectorAll('.na-photo-item').forEach(item=>{item.addEventListener('click',()=>toggleNaPhoto(+item.dataset.idx,s))});
-    // 拖拽上传到照片网格区域
-    if(!grid._dropBound){
-        grid._dropBound=true;
-        grid.addEventListener('dragover',e=>{e.preventDefault();grid.classList.add('na-grid-dragover')});
-        grid.addEventListener('dragleave',e=>{if(!grid.contains(e.relatedTarget))grid.classList.remove('na-grid-dragover')});
-        grid.addEventListener('drop',async e=>{
-            e.preventDefault();grid.classList.remove('na-grid-dragover');
-            const files=Array.from(e.dataTransfer.files).filter(f=>f.type.startsWith('image/')||f.name.match(/\.(heic|heif)$/i));
-            if(!files.length)return;
-            const btn=document.getElementById('naBatchUpload');
-            btn.textContent='上传中...';btn.disabled=true;
-            try{
-                const urls=await uploadFiles(files,(done,total)=>{btn.textContent=`上传 ${done}/${total}...`});
-                SHOOTS=SHOOTS.map(sh=>sh.slug===s.slug?{...sh,galleryImages:[...(sh.galleryImages||[]),...urls]}:sh);
-                saveShoots();
-                const updated=shootBySlug(s.slug);
-                if(updated)renderNaPhotosGrid(updated);
-                document.getElementById('naPhotosCount').textContent=(shootBySlug(s.slug)?.galleryImages||[]).length+' 张';
-                refreshSite();
-            }catch(ex){alert('上传失败：'+ex.message);}
-            btn.innerHTML='<svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>批量上传照片';
-            btn.disabled=false;
-        });
-    }
 }
 function toggleNaPhoto(idx,s){
     if(naSelectedPhotos.has(idx))naSelectedPhotos.delete(idx);else naSelectedPhotos.add(idx);
@@ -708,26 +516,11 @@ document.getElementById('naSaveMeta').addEventListener('click',()=>{
 });
 document.getElementById('naBatchUpload').addEventListener('click',()=>{
     if(!naCurrentSlug){alert('请先选择相册');return}
-    // 使用 file input 直接上传
-    const input=document.createElement('input');
-    input.type='file';input.accept='image/*';input.multiple=true;
-    input.style.display='none';document.body.appendChild(input);
-    input.addEventListener('change',async()=>{
-        if(!input.files.length){input.remove();return}
-        const btn=document.getElementById('naBatchUpload');
-        btn.textContent='上传中...';btn.disabled=true;
-        try{
-            const urls=await uploadFiles(input.files,(done,total)=>{btn.textContent=`上传 ${done}/${total}...`});
-            SHOOTS=SHOOTS.map(s=>s.slug===naCurrentSlug?{...s,galleryImages:[...(s.galleryImages||[]),...urls]}:s);
-            saveShoots();
-            const s=shootBySlug(naCurrentSlug);
-            if(s){renderNaPhotosGrid(s);document.getElementById('naPhotosCount').textContent=(s.galleryImages||[]).length+' 张';}
-            refreshSite();
-        }catch(e){alert('上传失败：'+e.message);}
-        btn.innerHTML='<svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>批量上传照片';
-        btn.disabled=false;input.remove();
-    });
-    input.click();
+    openCldUpload(url=>{
+        SHOOTS=SHOOTS.map(s=>s.slug===naCurrentSlug?{...s,galleryImages:[...(s.galleryImages||[]),url]}:s);
+        saveShoots();const s=shootBySlug(naCurrentSlug);if(s)renderNaPhotosGrid(s);refreshSite();
+        document.getElementById('naPhotosCount').textContent=(shootBySlug(naCurrentSlug)?.galleryImages||[]).length+' 张';
+    },{multiple:true});
 });
 document.getElementById('naBatchDelPhotos').addEventListener('click',()=>{
     if(!naCurrentSlug||naSelectedPhotos.size===0)return;
@@ -752,5 +545,14 @@ function renderNaSlidesBody(){
 document.getElementById('naNewSlide').addEventListener('click',()=>openSlideEdit(null));
 
 /* INIT */
+// 一次性清理 localStorage 里的无效幻灯片数据（your-bucket 占位符）
+(function cleanBadSlides(){
+    try{
+        const key='photo_gallery_home_slides';
+        const rows=JSON.parse(localStorage.getItem(key)||'[]');
+        const clean=rows.filter(s=>s.image_url&&!s.image_url.includes('your-bucket')&&!s.image_url.includes('your-bucket.supabase'));
+        if(clean.length!==rows.length)localStorage.setItem(key,JSON.stringify(clean));
+    }catch(e){}
+})();
 checkSession();
 refreshSite();
