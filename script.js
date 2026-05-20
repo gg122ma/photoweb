@@ -110,9 +110,8 @@ const pm=document.getElementById('profileMenu');if(pm){const adminItem=pm.queryS
 if(currentUser){const pb=document.getElementById('profileBtn');if(pb)pb.addEventListener('click',e=>{e.stopPropagation();document.getElementById('profileMenu').classList.toggle('open')})}else{const lb=document.getElementById('loginBtn');if(lb)lb.addEventListener('click',()=>openAuth('login'))}
 const pmMe=document.getElementById('profileMenuMe');if(pmMe)pmMe.onclick=()=>{document.getElementById('profileMenu').classList.remove('open');openProfilePage()};const pmAdmin=document.getElementById('profileMenuAdmin');if(pmAdmin)pmAdmin.onclick=()=>{document.getElementById('profileMenu').classList.remove('open');openNewAdminPanel()};updateAdminFab()}
 
-/* CLOUDINARY — 预缓存 widget，点击即开（消除延迟），批量收集上传结果 */
+/* CLOUDINARY — 预缓存 widget，点击即开，支持真正批量上传 */
 const _cldCache = {};
-
 function _makeCldWidget(multi) {
     if (typeof cloudinary === 'undefined') return null;
     let _pending = [];
@@ -120,48 +119,40 @@ function _makeCldWidget(multi) {
         cloudName: CLOUD_NAME, uploadPreset: UPLOAD_PRESET,
         sources: ['local', 'url'], multiple: !!multi,
         resourceType: 'image', folder: 'gallery',
-        cropping: false, showAdvancedOptions: false
+        cropping: false, showAdvancedOptions: false,
+        clientAllowedFormats: ['jpg','jpeg','png','webp','gif','heic','heif'],
+        maxFileSize: 50000000  // 50MB，支持原图
     }, (err, res) => {
         if (!err && res) {
-            if (res.event === 'success') {
-                _pending.push({ url: res.info.secure_url, info: res.info });
-            }
+            if (res.event === 'success') _pending.push({ url: res.info.secure_url, info: res.info });
             if (res.event === 'close') {
-                if (_pending.length && w._cb) {
-                    w._cb(_pending.map(x => x.url), _pending.map(x => x.info));
-                }
+                if (_pending.length && w._cb) w._cb(_pending.map(x => x.url), _pending.map(x => x.info));
                 _pending = []; w._cb = null;
             }
         }
     });
     return w;
 }
-
 function _getCldWidget(multi) {
-    const key = multi ? 'multi' : 'single';
-    if (!_cldCache[key]) _cldCache[key] = _makeCldWidget(multi);
-    return _cldCache[key];
+    const k = multi ? 'multi' : 'single';
+    if (!_cldCache[k]) _cldCache[k] = _makeCldWidget(multi);
+    return _cldCache[k];
 }
-
-// 页面加载后预热两个 widget，消除首次点击时 SDK 初始化延迟
 function prewarmCldWidgets() {
     if (typeof cloudinary === 'undefined') return;
-    _getCldWidget(false);
-    _getCldWidget(true);
+    _getCldWidget(false); _getCldWidget(true);
 }
-
-// 兼容旧调用 cb(url, info)，多图时逐张回调
+// 单图上传（兼容旧调用）
 function openCldUpload(cb, opts = {}) {
-    if (typeof cloudinary === 'undefined') { alert('Cloudinary not loaded'); return; }
+    if (typeof cloudinary === 'undefined') { alert('Cloudinary 未加载'); return; }
     const w = _getCldWidget(!!opts.multiple);
     if (!w) return;
     w._cb = (urls, infos) => urls.forEach((url, i) => cb(url, infos[i]));
     w.open();
 }
-
-// 批量上传专用：关闭 widget 后一次性回调全部 url 数组
+// 批量上传：关闭 widget 后一次性回调所有 url
 function openCldBatchUpload(cb) {
-    if (typeof cloudinary === 'undefined') { alert('Cloudinary not loaded'); return; }
+    if (typeof cloudinary === 'undefined') { alert('Cloudinary 未加载'); return; }
     const w = _getCldWidget(true);
     if (!w) return;
     w._cb = (urls) => cb(urls);
@@ -257,7 +248,7 @@ function openDet(shoot){
     function renderDetGal(s){
         const gi=s.galleryImages||[];
         const uploadBtn=isAdmin
-            ?'<button class="det-upload-btn" id="detUploadBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>批量上传照片</button>'
+            ?'<button class="det-upload-btn" id="detUploadBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>上传照片</button>'
             :'';
         const countBadge=gi.length?'<span>'+gi.length+' '+t('photos')+'</span>':'';
         if(gi.length){
@@ -265,7 +256,10 @@ function openDet(shoot){
                 +'<div class="det-gallery-grid">'+gi.map((url,i)=>'<div class="det-gal-item" data-idx="'+i+'"><img src="'+url+'" alt="" loading="lazy"></div>').join('')+'</div>';
             requestAnimationFrame(()=>{
                 const items=gal.querySelectorAll('.det-gal-item');
-                items.forEach((item,i)=>{setTimeout(()=>item.classList.add('vis'),800+i*80);item.addEventListener('click',()=>openLB(gi,i))});
+                items.forEach((item,i)=>{
+                    setTimeout(()=>item.classList.add('vis'),600+i*60);
+                    item.addEventListener('click',()=>openLB(gi,i));
+                });
             });
         }else{
             gal.innerHTML='<div class="det-gallery-head"><h3>'+t('galleryTitle')+'</h3><div class="det-gallery-head-right">'+uploadBtn+'</div></div>'
@@ -614,8 +608,68 @@ function renderNaSlidesBody(){
 }
 document.getElementById('naNewSlide').addEventListener('click',()=>openSlideEdit(null));
 
-/* INIT */
+/* ===== 关于我 (ABOUT ME) ===== */
+const ABOUT_KEY = 'photo_gallery_about';
+function loadAbout() { return readStore(ABOUT_KEY, { name:'', role:'', bio:'', instagram:'', email:'', avatar:'' }); }
+function saveAbout(data) { writeStore(ABOUT_KEY, data); }
+
+function initAboutPanel() {
+    const a = loadAbout();
+    const img = document.getElementById('naAboutAvatarImg');
+    if (img) { img.src = a.avatar || DEFAULT_COVER; }
+    const fields = { naAboutName:'name', naAboutRole:'role', naAboutBio:'bio', naAboutInstagram:'instagram', naAboutEmail:'email' };
+    Object.entries(fields).forEach(([id, key]) => { const el=document.getElementById(id); if(el) el.value = a[key]||''; });
+}
+
+function bindAboutPanel() {
+    const avatarWrap = document.getElementById('naAboutAvatarWrap');
+    const avatarBtn = document.getElementById('naAboutUploadAvatar');
+    const uploadAvatar = () => openCldUpload(url => {
+        document.getElementById('naAboutAvatarImg').src = url;
+        document.getElementById('naAboutAvatarImg').dataset.pendingUrl = url;
+    });
+    if (avatarWrap) avatarWrap.addEventListener('click', uploadAvatar);
+    if (avatarBtn) avatarBtn.addEventListener('click', e => { e.stopPropagation(); uploadAvatar(); });
+
+    const saveBtn = document.getElementById('naSaveAbout');
+    if (saveBtn) saveBtn.addEventListener('click', () => {
+        const img = document.getElementById('naAboutAvatarImg');
+        const data = {
+            avatar: img.dataset.pendingUrl || img.src || loadAbout().avatar,
+            name: document.getElementById('naAboutName').value.trim(),
+            role: document.getElementById('naAboutRole').value.trim(),
+            bio: document.getElementById('naAboutBio').value.trim(),
+            instagram: document.getElementById('naAboutInstagram').value.trim(),
+            email: document.getElementById('naAboutEmail').value.trim(),
+        };
+        saveAbout(data);
+        const hint = document.getElementById('naAboutSaveHint');
+        if (hint) { hint.textContent = '✓ 已保存'; hint.style.color = 'var(--success)'; setTimeout(() => hint.textContent = '', 2000); }
+        // Update footer Instagram link if provided
+        if (data.instagram) { const a = document.querySelector('.site-footer a'); if(a) a.href = data.instagram; }
+    });
+}
+
+// Extend openNewAdminPanel to init about tab
+const _origOpenNewAdminPanel = openNewAdminPanel;
+// Patch: bind about panel after DOM ready, once
+let _aboutBound = false;
+function ensureAboutBound() {
+    if (_aboutBound) return; _aboutBound = true;
+    bindAboutPanel();
+}
+
+/* ===== INIT ===== */
 checkSession();
 refreshSite();
+// 预热 Cloudinary widget，消除首次点击延迟
+if(typeof cloudinary!=='undefined'){prewarmCldWidgets()}else{window.addEventListener('load',()=>setTimeout(prewarmCldWidgets,800))}
+// 绑定关于我面板
+ensureAboutBound();
+
+// 打开关于我 Tab 时刷新数据
+document.querySelectorAll('.new-admin-tab[data-tab="about"]').forEach(tab => {
+    tab.addEventListener('click', () => initAboutPanel());
+});
 // 预热 Cloudinary widget，消除首次点击延迟
 if(typeof cloudinary!=='undefined'){prewarmCldWidgets()}else{window.addEventListener('load',()=>setTimeout(prewarmCldWidgets,800))}
