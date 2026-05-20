@@ -441,7 +441,7 @@ function setNaTab(tab){document.querySelectorAll('.new-admin-tab').forEach(t=>t.
 
 function renderNaAlbumList(){
     const el=document.getElementById('naAlbumList');
-    if(!SHOOTS.length){el.innerHTML='<div style="padding:1rem;font-family:'DM Mono',monospace;font-size:.65rem;color:var(--text-dim)">暂无相册</div>';return}
+    if(!SHOOTS.length){el.innerHTML='<div style="padding:1rem;font-family:DM Mono,monospace;font-size:.65rem;color:var(--text-dim)">暂无相册</div>';return}
     el.innerHTML=SHOOTS.map(s=>'<div class="na-album-item'+(naCurrentSlug===s.slug?' active':'')+'" data-slug="'+s.slug+'"><img src="'+s.cover+'" alt="" loading="lazy"><div class="na-album-item-info"><div class="na-album-item-title">'+s.dateDisplay+'</div><div class="na-album-item-meta">'+(s.galleryImages?s.galleryImages.length:0)+' 张照片</div></div></div>').join('');
     el.querySelectorAll('.na-album-item').forEach(item=>{item.addEventListener('click',()=>selectNaAlbum(item.dataset.slug))});
 }
@@ -524,7 +524,7 @@ document.getElementById('naNewAlbum').addEventListener('click',()=>{
 });
 function renderNaSlidesBody(){
     const el=document.getElementById('naSlidesBody');if(!el)return;
-    if(!HOME_SLIDES.length){el.innerHTML='<div style="font-family:'DM Mono',monospace;font-size:.72rem;color:var(--text-dim);padding:2rem;text-align:center">暂无幻灯片，点击右上方按钮添加</div>';return}
+    if(!HOME_SLIDES.length){el.innerHTML='<div style="font-family:DM Mono,monospace;font-size:.72rem;color:var(--text-dim);padding:2rem;text-align:center">暂无幻灯片，点击右上方按钮添加</div>';return}
     el.innerHTML=HOME_SLIDES.map((s,i)=>'<div class="na-slide-row"><img src="'+s.image_url+'" alt=""><div class="na-slide-row-info"><div class="na-slide-row-caption">'+(s.caption||'(无标题)')+'</div><div class="na-slide-row-sub">'+(s.sub||'—')+'</div></div><div class="na-slide-row-actions">'+(i>0?'<button data-smove="up" data-idx="'+i+'"><svg viewBox="0 0 24 24"><polyline points="18 15 12 9 6 15"/></svg></button>':'')+(i<HOME_SLIDES.length-1?'<button data-smove="down" data-idx="'+i+'"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></button>':'')+'<button data-sedit="'+i+'"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button><button class="del" data-sdel="'+i+'"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg></button></div></div>').join('');
     el.querySelectorAll('[data-sedit]').forEach(b=>b.addEventListener('click',()=>openSlideEdit(+b.dataset.sedit)));
     el.querySelectorAll('[data-sdel]').forEach(b=>b.addEventListener('click',()=>{if(!confirm('确认删除该幻灯片？'))return;HOME_SLIDES.splice(+b.dataset.sdel,1);saveHomeSlides();renderNaSlidesBody();router()}));
