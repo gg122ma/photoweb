@@ -194,11 +194,11 @@ a { color: inherit; text-decoration: none; }
     stroke: rgba(0,0,0,0.4);
 }
 .det-body { flex: 1; overflow-y: auto; scroll-behavior: smooth; }
-.det-hero { width: 100%; height: 65vh; position: relative; overflow: hidden; }
-.det-hero img { width: 100%; height: 100%; object-fit: cover; animation: zoomIn 10s ease-out forwards; }
-.det-hero::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 60%; background: linear-gradient(180deg, transparent, var(--bg)); }
+.det-hero { width: 100%; height: 100vh; position: relative; overflow: hidden; }
+.det-hero img { width: 100%; height: 100%; object-fit: cover; object-position: center top; animation: zoomIn 10s ease-out forwards; }
+.det-hero::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 35%; background: linear-gradient(180deg, transparent, var(--bg)); }
 @keyframes zoomIn { from {transform: scale(1);} to {transform: scale(1.05);} }
-.det-content { padding: 0 2.5rem 3rem; max-width: 800px; margin: -5rem auto 0; width: 100%; position: relative; z-index: 2; text-align: center; }
+.det-content { padding: 0 2.5rem 3rem; max-width: 800px; margin: -8rem auto 0; width: 100%; position: relative; z-index: 2; text-align: center; }
 .det-content h2 { font-family: 'Cormorant Garamond', serif; font-size: 3rem; font-weight: 500; margin-bottom: .5rem; opacity: 0; transform: translateY(20px); transition: all .8s var(--ease) .3s; }
 .detail-overlay.open .det-content h2 { opacity: 1; transform: translateY(0); }
 .det-content .det-zh { font-family: 'DM Mono', monospace; font-size: .9rem; color: var(--accent); margin-bottom: 2rem; letter-spacing: .1em; opacity: 0; transform: translateY(15px); transition: all .8s var(--ease) .4s; }
