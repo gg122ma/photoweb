@@ -1,16 +1,16 @@
-/* ===== 高级黑金 (Premium Black-Gold) ===== */
+/* ===== 高级黑金 (Premium Black-Gold - 香槟流沙金版) ===== */
 :root, [data-theme="dark"] {
     --bg: #050505; /* 极致深邃的黑 */
     --surface: #0a0a0c; 
     --surface2: #121215;
-    --accent: #d4af37; /* 经典高级香槟金 */
-    --accent-dim: rgba(212, 175, 55, 0.12); 
-    --accent-hover: #f3ce69;
-    --text-primary: #f4f0e6; 
-    --text-secondary: #9e9786; 
-    --text-dim: #5c574c;
-    --border: rgba(212, 175, 55, 0.15); /* 边框带有一丝暗金泛光 */
-    --border-hover: rgba(212, 175, 55, 0.4);
+    --accent: #d8b473; /* 柔和的高级香槟金，去除了廉价的亮黄色 */
+    --accent-dim: rgba(216, 180, 115, 0.12); 
+    --accent-hover: #f2d299; /* 悬浮时呈现更亮的流沙白金色 */
+    --text-primary: #f8f6f0; /* 文字微微偏暖白，与香槟金完美呼应 */
+    --text-secondary: #a39e93; 
+    --text-dim: #635e54;
+    --border: rgba(216, 180, 115, 0.15); /* 边框带有一丝香槟金泛光 */
+    --border-hover: rgba(216, 180, 115, 0.4);
     --nav-bg: rgba(5, 5, 5, 0.75); 
     --overlay: rgba(0, 0, 0, 0.85);
     --danger: #e74c3c; --success: #2ecc71;
@@ -22,17 +22,17 @@
 
 /* ===== 极简纯白 (Pure White) ===== */
 [data-theme="light"] {
-    --bg: #ffffff; /* 纯净白 */
+    --bg: #ffffff; 
     --surface: #fdfdfd; 
     --surface2: #f5f5f5;
-    --accent: #b8860b; /* 沉稳的暗金/琥珀色 */
-    --accent-dim: rgba(184, 134, 11, 0.08); 
-    --accent-hover: #8a6408;
-    --text-primary: #111111; /* 极致黑字 */
+    --accent: #b48a3a; /* 白底下的金需要深沉一点才压得住 */
+    --accent-dim: rgba(180, 138, 58, 0.08); 
+    --accent-hover: #8e6c2d;
+    --text-primary: #111111; 
     --text-secondary: #666666; 
     --text-dim: #999999;
     --border: rgba(0, 0, 0, 0.06); 
-    --border-hover: rgba(184, 134, 11, 0.3);
+    --border-hover: rgba(180, 138, 58, 0.3);
     --nav-bg: rgba(255, 255, 255, 0.85); 
     --overlay: rgba(255, 255, 255, 0.8);
     --danger: #c0392b; --success: #27ae60;
@@ -422,7 +422,7 @@ a { color: inherit; text-decoration: none; }
     border-color: var(--accent);
     background: var(--accent-dim);
     transform: translateY(-2px);
-    box-shadow: 0 0 0 4px rgba(212,184,122,.08);
+    box-shadow: 0 0 0 4px rgba(216,180,115,.08);
 }
 .drag-zone.drag-over { border-style: solid; }
 .drag-zone.uploading { border-color: var(--accent); cursor: default; }
@@ -1244,22 +1244,22 @@ a { color: inherit; text-decoration: none; }
     z-index: 9999;
     transform: translate(-50%, -50%);
     /* 高级柔和金光 */
-    background: radial-gradient(circle, rgba(212, 175, 55, 0.08) 0%, transparent 60%);
+    background: radial-gradient(circle, rgba(216, 180, 115, 0.08) 0%, transparent 60%);
     transition: width 0.4s var(--ease), height 0.4s var(--ease), background 0.4s var(--ease);
     will-change: transform;
     mix-blend-mode: screen; /* 叠加发光效果 */
 }
 /* 纯白模式下光圈效果改为柔和的阴影/色彩加深 */
 [data-theme="light"] .cursor-halo {
-    background: radial-gradient(circle, rgba(184, 134, 11, 0.05) 0%, transparent 60%);
+    background: radial-gradient(circle, rgba(180, 138, 58, 0.05) 0%, transparent 60%);
     mix-blend-mode: multiply;
 }
 
 /* 当鼠标悬停在卡片或按钮上时光圈收缩聚光 */
 body.hovering-element .cursor-halo {
     width: 150px; height: 150px;
-    background: radial-gradient(circle, rgba(212, 175, 55, 0.2) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(216, 180, 115, 0.22) 0%, transparent 70%);
 }
 [data-theme="light"] body.hovering-element .cursor-halo {
-    background: radial-gradient(circle, rgba(184, 134, 11, 0.15) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(180, 138, 58, 0.15) 0%, transparent 70%);
 }
