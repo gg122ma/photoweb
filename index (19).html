@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Photo · 视觉画廊</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,500;0,600;1,300&family=DM+Mono:wght@300;400&family=Noto+Sans+SC:wght@300;400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <!-- Cloudinary widget removed: using direct API upload instead -->
+</head>
+<body>
+
+<nav class="main-nav">
+    <a class="nav-brand" id="navBrand">Photo</a>
+    <div id="navCenter"></div>
+    <div class="nav-right" id="navRight"></div>
+</nav>
+
+<!-- PROFILE DROPDOWN MENU -->
+<div class="profile-menu" id="profileMenu">
+    <button class="profile-menu-item" id="profileMenuMe">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+        <span>我</span>
+    </button>
+    <button class="profile-menu-item" id="profileMenuAdmin">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+        <span>管理员界面</span>
+    </button>
+</div>
+
+<!-- PROFILE PAGE OVERLAY -->
+<div class="profile-overlay" id="profileOverlay">
+    <div class="profile-box">
+        <button class="profile-close" id="profileClose">
+            <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <div class="profile-avatar-wrap" id="profileAvatarWrap"></div>
+        <div class="profile-email" id="profileEmail"></div>
+        <div class="profile-role" id="profileRole"></div>
+        <div class="profile-stats" id="profileStats"></div>
+        <button class="profile-logout-btn" id="profileLogoutBtn">
+            <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+            退出登录
+        </button>
+    </div>
+</div>
+
+<div id="app"></div>
+
+<!-- SITE FOOTER -->
+<footer class="site-footer">
+    <a href="https://www.instagram.com/lalok08?igsh=MXE2YXc2NzZuZ2Izeg==" target="_blank" rel="noopener noreferrer" title="Instagram @lalok08">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="5"/><circle cx="17.5" cy="6.5" r="1.5" fill="currentColor" stroke="none"/></svg>
+    </a>
+</footer>
+
+<!-- AUTH MODAL -->
+<div class="modal-overlay" id="authModal">
+    <div class="modal-box">
+        <button class="modal-close" id="authClose">&times;</button>
+        <div class="modal-title" id="authTitle"></div>
+        <div class="form-group"><label class="form-label" id="authEmailLabel"></label><input class="form-input" type="email" id="authEmail" autocomplete="email"></div>
+        <div class="form-group"><label class="form-label" id="authPassLabel"></label><input class="form-input" type="password" id="authPass" autocomplete="current-password"></div>
+        <button class="form-btn" id="authSubmit"></button>
+        <div class="form-link" id="authSwitch"></div>
+        <div class="form-msg" id="authMsg"></div>
+    </div>
+</div>
+
+<!-- EDIT MODAL -->
+<div class="edit-overlay" id="editOverlay">
+    <div class="edit-box">
+        <h2 id="editTitle"></h2>
+        <div class="edit-section">
+            <div class="edit-section-title"><span class="dot"></span><span data-i18n="coverImage"></span></div>
+            <div class="edit-cover-area" id="editCoverArea">
+                <img id="editCoverImg" src="" alt="">
+                <div class="cover-empty" id="coverEmpty"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/><path d="M21 15l-5-5L5 21" stroke="currentColor"/></svg><span data-i18n="clickUpload"></span></div>
+            </div>
+            <div class="edit-cover-actions">
+                <button class="upload-btn" id="editUploadBtn"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg> <span data-i18n="uploadImage"></span></button>
+                <button class="upload-btn" id="editUrlToggle"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg> <span data-i18n="pasteUrl"></span></button>
+            </div>
+            <div class="form-group" id="coverUrlGroup" style="display:none"><label class="form-label" data-i18n="coverUrl"></label><input class="form-input" id="editCoverInput"></div>
+        </div>
+        <div class="edit-section">
+            <div class="edit-section-title"><span class="dot"></span><span data-i18n="basicInfo"></span></div>
+            <div class="form-group"><label class="form-label" data-i18n="slug"></label><input class="form-input" id="editSlug"></div>
+            <div class="edit-row">
+                <div class="form-group"><label class="form-label" data-i18n="titleLabel"></label><input class="form-input" id="editTitleInput"></div>
+                <div class="form-group"><label class="form-label" data-i18n="dateLabel"></label><input class="form-input" type="date" id="editDateInput"></div>
+            </div>
+        </div>
+        <div class="edit-section">
+            <div class="edit-section-title"><span class="dot"></span><span data-i18n="detailInfo"></span></div>
+            <div class="form-group"><label class="form-label" data-i18n="descLabel"></label><textarea class="form-textarea" id="editDescInput" rows="2"></textarea></div>
+            <div class="edit-row">
+                <div class="form-group"><label class="form-label" data-i18n="peopleLabel"></label><input class="form-input" id="editPeopleInput"></div>
+                <div class="form-group"><label class="form-label" data-i18n="equipLabel"></label><input class="form-input" id="editEquipInput"></div>
+            </div>
+            <div class="form-group"><label class="form-label" data-i18n="driveLink"></label><input class="form-input" id="editDriveInput"></div>
+        </div>
+        <div class="edit-section">
+            <div class="edit-section-title"><span class="dot"></span><span data-i18n="galleryPhotos"></span></div>
+            <div class="edit-gallery" id="editGallery"></div>
+            <button class="upload-btn" id="editGalleryAddBtn" style="margin-top:.6rem"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> <span data-i18n="addPhoto"></span></button>
+        </div>
+        <input type="hidden" id="editOrigSlug">
+        <div class="edit-actions">
+            <button class="a-btn" id="editCancelBtn" data-i18n="cancel"></button>
+            <button class="a-btn" id="editSaveBtn" style="background:var(--accent);color:var(--bg);border-color:var(--accent)" data-i18n="save"></button>
+        </div>
+    </div>
+</div>
+
+<!-- NEW ADMIN PANEL (Full Page Overlay) -->
+<div class="new-admin-overlay" id="newAdminOverlay">
+    <div class="new-admin-topbar">
+        <div class="new-admin-title">
+            <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+            管理员界面
+        </div>
+        <div class="new-admin-tabs">
+            <button class="new-admin-tab active" data-tab="albums">相册管理</button>
+            <button class="new-admin-tab" data-tab="slides">首页幻灯片</button>
+        </div>
+        <button class="new-admin-close" id="newAdminClose">
+            <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+    </div>
+
+    <!-- 相册管理面板 -->
+    <div class="new-admin-panel active" id="tab-albums">
+        <div class="new-admin-toolbar">
+            <div class="new-admin-toolbar-left">
+                <span class="new-admin-sel-info" id="newAdminSelInfo">请先选择相册</span>
+            </div>
+            <div class="new-admin-toolbar-right">
+                <button class="na-btn" id="naNewAlbum">
+                    <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    新建相册
+                </button>
+                <button class="na-btn" id="naBatchUpload" disabled title="请先选择相册">
+                    <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+                    批量上传照片
+                </button>
+                <button class="na-btn danger" id="naBatchDelPhotos" disabled title="请先选择相册">
+                    <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+                    删除选中照片
+                </button>
+            </div>
+        </div>
+        <div class="new-admin-body">
+            <div class="na-sidebar">
+                <div class="na-sidebar-head">相册列表</div>
+                <div class="na-album-list" id="naAlbumList"></div>
+            </div>
+            <div class="na-content">
+                <div class="na-empty-state" id="naEmptyState">
+                    <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none"/><path d="M21 15l-5-5L5 21"/></svg>
+                    <p>请从左侧选择一个相册</p>
+                    <span>选中后可批量上传或删除照片</span>
+                </div>
+                <div class="na-album-detail" id="naAlbumDetail" style="display:none">
+                    <div class="na-detail-cover-section">
+                        <div class="na-detail-cover-wrap">
+                            <img class="na-detail-cover-img" id="naDetailCoverImg" src="" alt="">
+                            <div class="na-detail-cover-overlay">
+                                <button class="na-cover-btn" id="naChangeCover">
+                                    <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+                                    更换封面
+                                </button>
+                            </div>
+                        </div>
+                        <div class="na-detail-meta-form">
+                            <div class="na-meta-group">
+                                <label>日期</label>
+                                <input class="na-meta-input" type="date" id="naMetaDate">
+                            </div>
+                            <div class="na-meta-group">
+                                <label>描述</label>
+                                <textarea class="na-meta-input" id="naMetaDesc" rows="3"></textarea>
+                            </div>
+                            <div class="na-meta-group">
+                                <label>人物（逗号分隔）</label>
+                                <input class="na-meta-input" id="naMetaPeople">
+                            </div>
+                            <div class="na-meta-group">
+                                <label>设备</label>
+                                <input class="na-meta-input" id="naMetaEquip">
+                            </div>
+                            <div class="na-meta-group">
+                                <label>Google Drive 链接</label>
+                                <input class="na-meta-input" id="naMetaDrive" type="url" placeholder="https://drive.google.com/...">
+                            </div>
+                            <button class="na-save-meta-btn" id="naSaveMeta">保存信息</button>
+                            <button class="na-del-album-btn" id="naDelAlbum">
+                                <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+                                删除整个相册
+                            </button>
+                        </div>
+                    </div>
+                    <div class="na-photos-head">
+                        <div class="na-photos-title">
+                            相册照片
+                            <span class="na-photos-count" id="naPhotosCount">0 张</span>
+                        </div>
+                        <label class="na-select-all-label">
+                            <input type="checkbox" id="naSelectAll"> 全选
+                        </label>
+                    </div>
+                    <div class="na-photos-grid" id="naPhotosGrid"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 幻灯片面板 -->
+    <div class="new-admin-panel" id="tab-slides">
+        <div class="new-admin-toolbar">
+            <div class="new-admin-toolbar-left">
+                <span style="font-family:'DM Mono',monospace;font-size:.7rem;color:var(--text-secondary)">管理首页轮播图顺序与内容</span>
+            </div>
+            <div class="new-admin-toolbar-right">
+                <button class="na-btn" id="naNewSlide">
+                    <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    添加幻灯片
+                </button>
+            </div>
+        </div>
+        <div class="na-slides-body" id="naSlidesBody"></div>
+    </div>
+</div>
+
+<!-- ADMIN CENTER MODAL (kept for compatibility) -->
+<div class="admin-center-overlay" id="adminCenter">
+    <div class="admin-center-box">
+        <button class="admin-center-close" id="adminCenterClose">
+            <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <h2 class="admin-center-title">管理面板</h2>
+        <p class="admin-center-sub">Admin Panel</p>
+        <div class="admin-center-tabs">
+            <button class="admin-center-tab on" data-panel="quick-photo">添加照片</button>
+            <button class="admin-center-tab" data-panel="albums">管理相册</button>
+            <button class="admin-center-tab" data-panel="slides">首页幻灯片</button>
+        </div>
+        <div id="adminCenterErr" class="admin-msg err"></div>
+        <div id="adminCenterOk" class="admin-msg ok"></div>
+        <div class="admin-center-panel active" id="panel-quick-photo">
+            <div class="admin-upload-zone" id="adminUploadZone">
+                <div class="admin-upload-label" id="adminUploadLabel">
+                    <em>点击上传</em> 或选择 Cloudinary 图片<br>
+                    <span style="font-size:9px;opacity:.6;margin-top:.3rem;display:inline-block">连接 Cloudinary · 使用原图</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">加入相册</label>
+                <select class="form-input" id="adminPhotoAlbum"></select>
+            </div>
+            <div class="edit-row">
+                <div class="form-group"><label class="form-label">新相册标题</label><input class="form-input" id="adminNewAlbumTitle" placeholder="选择"新建相册"时使用"></div>
+                <div class="form-group"><label class="form-label">日期</label><input class="form-input" type="date" id="adminNewAlbumDate"></div>
+            </div>
+            <button class="form-btn" id="adminAddPhotoBtn">上传照片</button>
+        </div>
+        <div class="admin-center-panel" id="panel-albums">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:.8rem;margin-bottom:1rem;flex-wrap:wrap">
+                <div class="admin-list-meta">编辑所有相册与详情照片</div>
+                <button class="a-btn" id="adminNewAlbumBtn">+ 新增相册</button>
+            </div>
+            <div class="admin-list" id="adminAlbumList"></div>
+        </div>
+        <div class="admin-center-panel" id="panel-slides">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:.8rem;margin-bottom:1rem;flex-wrap:wrap">
+                <div class="admin-list-meta">管理首页轮播图顺序与文字</div>
+                <button class="a-btn" id="adminNewSlideBtn">+ 添加幻灯片</button>
+            </div>
+            <div class="admin-list" id="homeSlidesAdmin"></div>
+        </div>
+    </div>
+</div>
+
+<button class="admin-fab" id="adminFab" title="管理面板">
+    <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+</button>
+
+<!-- LIGHTBOX -->
+<div class="lightbox-overlay" id="lightbox">
+    <button class="lightbox-close" id="lbClose">&times;</button>
+    <button class="lightbox-nav lightbox-prev" id="lbPrev">&#8249;</button>
+    <button class="lightbox-nav lightbox-next" id="lbNext">&#8250;</button>
+    <img id="lbImg" src="" alt="">
+    <span class="lightbox-counter" id="lbCounter"></span>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
+</body>
+</html>
