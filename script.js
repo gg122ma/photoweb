@@ -183,6 +183,12 @@ function openCldUpload(cb, opts={}) {
                 fd.append('file', file);
                 fd.append('upload_preset', UPLOAD_PRESET);
                 fd.append('folder', 'gallery');
+                // For gallery photos: request an eager compressed version at upload time
+                // so Cloudinary stores the smaller file and returns its URL directly
+                if (opts.compress) {
+                    fd.append('eager', 'f_auto,q_auto,w_1200');
+                    fd.append('eager_async', 'false');
+                }
                 const res = await fetch(
                     'https://api.cloudinary.com/v1_1/' + CLOUD_NAME + '/image/upload',
                     { method: 'POST', body: fd }
@@ -190,10 +196,12 @@ function openCldUpload(cb, opts={}) {
                 if (!res.ok) throw new Error('Upload failed: ' + res.status);
                 const data = await res.json();
                 if (data.secure_url) {
-                    // Only compress gallery photos (detail page bottom grid); covers and slides stay as original
-                    const finalUrl = opts.compress
-                        ? optimizeCldUrl(data.secure_url, {w:1200,q:'auto',f:'auto'})
-                        : data.secure_url;
+                    // For gallery photos: use the eager (compressed) URL,
+                    // otherwise fall back to the original URL
+                    let finalUrl = data.secure_url;
+                    if (opts.compress && data.eager && data.eager[0] && data.eager[0].secure_url) {
+                        finalUrl = data.eager[0].secure_url;
+                    }
                     cb(finalUrl, data);
                 }
             } catch (e) {
