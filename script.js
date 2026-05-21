@@ -220,7 +220,7 @@ function normalizeShoot(s){
         equipment:s.equipment||'',drive:s.drive||s.drive_link||'',
         cover:cldCover(s.cover||s.cover_url||DEFAULT_COVER),
         images:[cldFull(s.cover||s.cover_url||DEFAULT_IMAGE)],
-        galleryImages:parseGalleryImages(s.galleryImages||s.gallery_images).map(u=>cldFull(u)),
+        galleryImages:parseGalleryImages(s.galleryImages||s.gallery_images||s.images).map(u=>cldFull(u)),
         dateDisplay:fmtDate(date)
     }
 }
@@ -241,7 +241,7 @@ function shootToSbRow(s){
         equipment:s.equipment||'',
         drive_link:s.drive||'',
         cover_url:s.cover||DEFAULT_COVER,
-        gallery_images:JSON.stringify(s.galleryImages||[])
+        images:(s.galleryImages||[])
     };
 }
 
@@ -253,7 +253,7 @@ function sbRowToShoot(r){
         title:r.title,description:r.description,
         people:Array.isArray(r.people)?r.people:[],
         equipment:r.equipment,drive_link:r.drive_link,
-        cover_url:r.cover_url,gallery_images:r.gallery_images
+        cover_url:r.cover_url,gallery_images:r.images
     });
 }
 
