@@ -13,6 +13,7 @@ async function sbGet(table,query=''){
     if(!res.ok)throw new Error('Supabase GET failed: '+table+' '+res.status);
     return res.json();
 }
+// 完整 upsert：管理员保存时用，会覆盖所有字段
 async function sbUpsert(table,data){
     const res=await fetch(SUPABASE_URL+'/rest/v1/'+table,{
         method:'POST',
@@ -20,6 +21,15 @@ async function sbUpsert(table,data){
         body:JSON.stringify(Array.isArray(data)?data:[data])
     });
     if(!res.ok){const t=await res.text();throw new Error('Supabase UPSERT failed: '+table+' '+res.status+' '+t);}
+}
+// 只插入不存在的行：迁移用，绝对不覆盖已有数据
+async function sbInsertIfNotExists(table,data){
+    const res=await fetch(SUPABASE_URL+'/rest/v1/'+table,{
+        method:'POST',
+        headers:{...SB_HEADERS,'Prefer':'resolution=ignore-duplicates'},
+        body:JSON.stringify(Array.isArray(data)?data:[data])
+    });
+    if(!res.ok){const t=await res.text();throw new Error('Supabase INSERT failed: '+table+' '+res.status+' '+t);}
 }
 async function sbDelete(table,filter){
     const res=await fetch(SUPABASE_URL+'/rest/v1/'+table+'?'+filter,{
@@ -269,23 +279,28 @@ function slideToSbRow(s,i){
     };
 }
 
-// Push any shoots/slides from localStorage to Supabase (one-time migration)
+// 一次性迁移：把 localStorage 旧数据推到 Supabase
+// 使用 ignore-duplicates，绝对不覆盖 Supabase 已有数据（含真实 Cloudinary 图片）
 async function migrateLocalDataToSupabase(){
+    // 已经迁移过就跳过，防止每次刷新重复运行
+    if(localStorage.getItem('_sb_migrated')==='1')return;
     try{
         const localShoots=readStore(STORAGE_KEYS.shoots,[]);
         if(localShoots.length){
-            console.log('[migrate] pushing',localShoots.length,'local shoots to Supabase…');
-            await sbUpsert('shoots',localShoots.map(s=>shootToSbRow(normalizeShoot(s))));
+            console.log('[migrate] pushing',localShoots.length,'local shoots (insert-only)…');
+            await sbInsertIfNotExists('shoots',localShoots.map(s=>shootToSbRow(normalizeShoot(s))));
             localStorage.removeItem(STORAGE_KEYS.shoots);
             console.log('[migrate] shoots done');
         }
         const localSlides=readStore(STORAGE_KEYS.slides,[]).filter(s=>isValidImageUrl(s.image_url));
         if(localSlides.length){
-            console.log('[migrate] pushing',localSlides.length,'local slides to Supabase…');
-            await sbUpsert('home_slides',localSlides.map(slideToSbRow));
+            console.log('[migrate] pushing',localSlides.length,'local slides (insert-only)…');
+            await sbInsertIfNotExists('home_slides',localSlides.map(slideToSbRow));
             localStorage.removeItem(STORAGE_KEYS.slides);
             console.log('[migrate] slides done');
         }
+        // 标记已迁移，之后刷新不再执行
+        localStorage.setItem('_sb_migrated','1');
     }catch(e){
         console.warn('[migrate] migration error (will still load from Supabase):',e);
     }
