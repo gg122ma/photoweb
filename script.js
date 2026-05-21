@@ -190,9 +190,11 @@ function openCldUpload(cb, opts={}) {
                 if (!res.ok) throw new Error('Upload failed: ' + res.status);
                 const data = await res.json();
                 if (data.secure_url) {
-                    // Always pass back the optimized URL
-                    const optimizedUrl = optimizeCldUrl(data.secure_url, {w:1200,q:'auto',f:'auto'});
-                    cb(optimizedUrl, data);
+                    // Only compress gallery photos (detail page bottom grid); covers and slides stay as original
+                    const finalUrl = opts.compress
+                        ? optimizeCldUrl(data.secure_url, {w:1200,q:'auto',f:'auto'})
+                        : data.secure_url;
+                    cb(finalUrl, data);
                 }
             } catch (e) {
                 console.error('Cloudinary upload error:', e);
@@ -786,7 +788,7 @@ document.getElementById('naBatchUpload').addEventListener('click',()=>{
         await refreshSite();
         const s=shootBySlug(naCurrentSlug);if(s)renderNaPhotosGrid(s);
         document.getElementById('naPhotosCount').textContent=(shootBySlug(naCurrentSlug)?.galleryImages||[]).length+' 张';
-    },{multiple:true});
+    },{multiple:true,compress:true});
 });
 document.getElementById('naBatchDelPhotos').addEventListener('click',async()=>{
     if(!naCurrentSlug||naSelectedPhotos.size===0)return;
