@@ -222,6 +222,8 @@ function isValidImageUrl(url){
 
 function normalizeShoot(s){
     const date=s.date||s.shoot_date||new Date().toISOString().slice(0,10),d=new Date(date);
+    // galleryImages 优先用传入的值，绝不用封面覆盖
+    const gallery=parseGalleryImages(s.galleryImages||s.gallery_images||s.images);
     return{
         slug:s.slug,id:s.id||s.slug,date,
         year:s.year||s.year_num||d.getFullYear(),
@@ -229,9 +231,8 @@ function normalizeShoot(s){
         title:s.title||'',description:s.description||'',
         people:Array.isArray(s.people)?s.people:[],
         equipment:s.equipment||'',drive:s.drive||s.drive_link||'',
-        cover:cldCover(s.cover||s.cover_url||DEFAULT_COVER),
-        images:[cldFull(s.cover||s.cover_url||DEFAULT_IMAGE)],
-        galleryImages:parseGalleryImages(s.galleryImages||s.gallery_images||s.images).map(u=>u),
+        cover:s.cover||s.cover_url||DEFAULT_COVER,
+        galleryImages:gallery,
         dateDisplay:fmtDate(date)
     }
 }
@@ -252,7 +253,7 @@ function shootToSbRow(s){
         equipment:s.equipment||'',
         drive_link:s.drive||'',
         cover_url:s.cover||DEFAULT_COVER,
-        images:(s.galleryImages||[])
+        images:s.galleryImages||[]
     };
 }
 
@@ -499,7 +500,7 @@ function openAdminCenter(){if(!isAdmin){openAuth('login');return}fillAdminAlbumS
 function closeAdminCenter(){document.getElementById('adminCenter').classList.remove('on');document.body.style.overflow=''}
 function renderAdminAlbumList(){const el=document.getElementById('adminAlbumList');if(!el)return;if(!SHOOTS.length){el.innerHTML='<div class="admin-list-meta">暂无相册，先添加一张照片或新建相册。</div>';return}el.innerHTML=SHOOTS.map(s=>'<div class="admin-list-row"><img src="'+s.cover+'" alt=""><div class="admin-list-main"><div class="admin-list-title">'+s.title+'</div><div class="admin-list-meta">'+s.dateDisplay+' · '+(s.galleryImages?s.galleryImages.length:0)+' '+t('photos')+' · '+(s.equipment||'—')+'</div></div><div class="admin-list-actions"><button class="act-btn" data-album-edit="'+s.slug+'">'+t('edit')+'</button><button class="act-btn" data-album-cover="'+s.slug+'">'+t('batchCover')+'</button><button class="act-btn del" data-album-del="'+s.slug+'">'+t('delete')+'</button></div></div>').join('');
 el.querySelectorAll('[data-album-edit]').forEach(b=>b.addEventListener('click',()=>openEdit(shootBySlug(b.dataset.albumEdit))));
-el.querySelectorAll('[data-album-cover]').forEach(b=>b.addEventListener('click',()=>openCldUpload(url=>{SHOOTS=SHOOTS.map(s=>s.slug===b.dataset.albumCover?{...s,cover:url,images:[url]}:s);saveShoots();refreshSite();renderAdminAlbumList();showAdminMsg('ok','封面已更新')})));
+el.querySelectorAll('[data-album-cover]').forEach(b=>b.addEventListener('click',()=>openCldUpload(async url=>{SHOOTS=SHOOTS.map(s=>s.slug===b.dataset.albumCover?{...s,cover:url}:s);const updated=shootBySlug(b.dataset.albumCover);if(updated)await saveShootToSupabase(updated);await refreshSite();renderAdminAlbumList();showAdminMsg('ok','封面已更新')})));
 el.querySelectorAll('[data-album-del]').forEach(b=>b.addEventListener('click',async()=>{if(!confirm(t('confirmDel')))return;await deleteShootFromSupabase(b.dataset.albumDel);SHOOTS=SHOOTS.filter(s=>s.slug!==b.dataset.albumDel);refreshSite();renderAdminAlbumList();fillAdminAlbumSelect();showAdminMsg('ok','相册已删除')}))}
 
 async function addPendingPhotoToAlbum(){if(!adminPendingPhotoUrl){showAdminMsg('err','请先上传照片');return}const target=document.getElementById('adminPhotoAlbum').value;if(target==='__new__'){const title=document.getElementById('adminNewAlbumTitle').value.trim()||'Untitled';const date=document.getElementById('adminNewAlbumDate').value||new Date().toISOString().slice(0,10);const d=new Date(date);const slug=slugifyTitle(title);const row=normalizeShoot({id:slug,slug,title,date,year:d.getFullYear(),month:d.getMonth()+1,description:'',people:[],equipment:'',drive:'',cover:adminPendingPhotoUrl,galleryImages:[adminPendingPhotoUrl]});SHOOTS=[row,...SHOOTS]}else{SHOOTS=SHOOTS.map(s=>s.slug===target?{...s,galleryImages:[...(s.galleryImages||[]),adminPendingPhotoUrl]}:s)}await saveShoots();refreshSite();fillAdminAlbumSelect();renderAdminAlbumList();resetAdminUpload();document.getElementById('adminNewAlbumTitle').value='';showAdminMsg('ok','照片已添加')}
@@ -622,7 +623,7 @@ document.getElementById('editSaveBtn').addEventListener('click', async () => {
         await saveShootToSupabase(newShoot);
     }
     document.getElementById('editOverlay').classList.remove('active');
-    refreshSite();
+    await refreshSite();
 });
 
 document.getElementById('adminCenterClose').addEventListener('click', closeAdminCenter);
@@ -733,7 +734,7 @@ document.getElementById('naSelectAll').addEventListener('change',function(){
 });
 document.getElementById('naChangeCover').addEventListener('click',()=>{
     if(!naCurrentSlug)return;
-    openCldUpload(url=>{SHOOTS=SHOOTS.map(s=>s.slug===naCurrentSlug?{...s,cover:url,images:[url]}:s);saveShoots();document.getElementById('naDetailCoverImg').src=url;refreshSite();renderNaAlbumList()});
+    openCldUpload(async url=>{SHOOTS=SHOOTS.map(s=>s.slug===naCurrentSlug?{...s,cover:url}:s);const updated=shootBySlug(naCurrentSlug);if(updated)await saveShootToSupabase(updated);document.getElementById('naDetailCoverImg').src=url;await refreshSite();renderNaAlbumList()});
 });
 document.getElementById('naSaveMeta').addEventListener('click',async()=>{
     if(!naCurrentSlug)return;
@@ -746,7 +747,7 @@ document.getElementById('naSaveMeta').addEventListener('click',async()=>{
     SHOOTS=SHOOTS.map(s=>{if(s.slug!==naCurrentSlug)return s;return normalizeShoot({...s,date,year:d.getFullYear(),month:d.getMonth()+1,description:desc,people,equipment:equip,drive})});
     const updated=shootBySlug(naCurrentSlug);
     if(updated)await saveShootToSupabase(updated);
-    refreshSite();renderNaAlbumList();
+    await refreshSite();renderNaAlbumList();
     const btn=document.getElementById('naSaveMeta');btn.textContent='✓ 已保存';btn.style.background='var(--success)';setTimeout(()=>{btn.textContent='保存信息';btn.style.background=''},1800);
 });
 document.getElementById('naBatchUpload').addEventListener('click',()=>{
@@ -754,7 +755,8 @@ document.getElementById('naBatchUpload').addEventListener('click',()=>{
     openCldUpload(async url=>{
         SHOOTS=SHOOTS.map(s=>s.slug===naCurrentSlug?{...s,galleryImages:[...(s.galleryImages||[]),url]}:s);
         const updated=shootBySlug(naCurrentSlug);if(updated)await saveShootToSupabase(updated);
-        const s=shootBySlug(naCurrentSlug);if(s)renderNaPhotosGrid(s);refreshSite();
+        await refreshSite();
+        const s=shootBySlug(naCurrentSlug);if(s)renderNaPhotosGrid(s);
         document.getElementById('naPhotosCount').textContent=(shootBySlug(naCurrentSlug)?.galleryImages||[]).length+' 张';
     },{multiple:true});
 });
@@ -765,7 +767,8 @@ document.getElementById('naBatchDelPhotos').addEventListener('click',async()=>{
     naSelectedPhotos=new Set();
     document.getElementById('naBatchDelPhotos').disabled=true;
     const updated=shootBySlug(naCurrentSlug);if(updated)await saveShootToSupabase(updated);
-    const s=shootBySlug(naCurrentSlug);if(s)renderNaPhotosGrid(s);refreshSite();
+    await refreshSite();
+    const s=shootBySlug(naCurrentSlug);if(s)renderNaPhotosGrid(s);
     document.getElementById('naPhotosCount').textContent=(shootBySlug(naCurrentSlug)?.galleryImages||[]).length+' 张';
 });
 document.getElementById('naNewAlbum').addEventListener('click',()=>{openEdit(null)});
