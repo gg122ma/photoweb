@@ -41,10 +41,11 @@ function optimizeCldUrl(url, opts){
     // Insert after /image/upload/ (or /video/upload/)
     return url.replace(/(\/image\/upload\/|\/video\/upload\/)/,'$1'+transform+'/');
 }
-// Cover images (smaller thumbs)
-function cldCover(url){return optimizeCldUrl(url,{w:800,q:'auto',f:'auto'})}
-// Gallery / lightbox images
-function cldFull(url){return optimizeCldUrl(url,{w:1200,q:'auto',f:'auto'})}
+// 首页slider、相册封面、详情页hero → 原图，不压缩
+function cldCover(url){return url||''}
+function cldFull(url){return url||''}
+// 只有详情页下方gallery小图才压缩
+function cldGallery(url){return optimizeCldUrl(url,{w:1200,q:'auto',f:'auto'})}
 
 let SHOOTS=[],monthSet=new Set(),currentUser=null,isAdmin=false;
 let currentLang=localStorage.getItem('lang')||'zh',activeObservers=[];
@@ -220,7 +221,7 @@ function normalizeShoot(s){
         equipment:s.equipment||'',drive:s.drive||s.drive_link||'',
         cover:cldCover(s.cover||s.cover_url||DEFAULT_COVER),
         images:[cldFull(s.cover||s.cover_url||DEFAULT_IMAGE)],
-        galleryImages:parseGalleryImages(s.galleryImages||s.gallery_images||s.images).map(u=>cldFull(u)),
+        galleryImages:parseGalleryImages(s.galleryImages||s.gallery_images||s.images).map(u=>u),
         dateDisplay:fmtDate(date)
     }
 }
@@ -421,7 +422,7 @@ function openDet(shoot){
     const driveBtn=document.getElementById('detDriveBtn');
     if(shoot.drive){driveBtn.href=shoot.drive;driveBtn.style.display=''}else driveBtn.style.display='none';
     const gal=document.getElementById('detGallery');
-    const gi=(shoot.galleryImages||[]).map(u=>cldFull(u));
+    const gi=(shoot.galleryImages||[]).map(u=>cldGallery(u));
     if(gi.length){
         gal.innerHTML='<div class="det-gallery-head"><h3>'+t('galleryTitle')+'</h3><span>'+gi.length+' '+t('photos')+'</span></div><div class="det-gallery-grid">'+gi.map((url,i)=>'<div class="det-gal-item" data-idx="'+i+'"><img src="'+url+'" alt="" loading="lazy"></div>').join('')+'</div>';
         requestAnimationFrame(()=>{
