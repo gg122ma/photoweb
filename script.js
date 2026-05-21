@@ -17,10 +17,16 @@ async function sbGet(table,query=''){
 async function sbUpsert(table,data){
     const res=await fetch(SUPABASE_URL+'/rest/v1/'+table,{
         method:'POST',
-        headers:{...SB_HEADERS,'Prefer':'resolution=merge-duplicates'},
+        headers:{...SB_HEADERS,'Prefer':'resolution=merge-duplicates,return=minimal'},
         body:JSON.stringify(Array.isArray(data)?data:[data])
     });
-    if(!res.ok){const t=await res.text();throw new Error('Supabase UPSERT failed: '+table+' '+res.status+' '+t);}
+    if(!res.ok){
+        const t=await res.text();
+        if(res.status===403||res.status===401){
+            console.error('[Supabase] 写入被拒绝（RLS）。请在 Supabase SQL Editor 执行：\nALTER TABLE '+table+' ENABLE ROW LEVEL SECURITY;\nCREATE POLICY allow_anon_write ON '+table+' FOR ALL USING (true) WITH CHECK (true);');
+        }
+        throw new Error('Supabase UPSERT failed: '+table+' '+res.status+' '+t);
+    }
 }
 // 只插入不存在的行：迁移用，绝对不覆盖已有数据
 async function sbInsertIfNotExists(table,data){
@@ -34,7 +40,7 @@ async function sbInsertIfNotExists(table,data){
 async function sbDelete(table,filter){
     const res=await fetch(SUPABASE_URL+'/rest/v1/'+table+'?'+filter,{
         method:'DELETE',
-        headers:{apikey:SUPABASE_KEY,Authorization:'Bearer '+SUPABASE_KEY}
+        headers:{apikey:SUPABASE_KEY,Authorization:'Bearer '+SUPABASE_KEY,'Prefer':'return=minimal'}
     });
     if(!res.ok)throw new Error('Supabase DELETE failed: '+table+' '+res.status);
 }
@@ -343,8 +349,9 @@ async function loadSlidesFromSupabase(){
         sub:s.sub||'',
         sort_order:s.sort_order
     }));
-    if(!HOME_SLIDES.length){
-        HOME_SLIDES=SHOOTS.slice(0,5).map(s=>({id:'slide-'+s.slug,image_url:s.cover,caption:s.title,sub:''}));
+    // Only use shoot covers as fallback if DB is genuinely empty (no slides configured yet)
+    if(!HOME_SLIDES.length && SHOOTS.length){
+        HOME_SLIDES=SHOOTS.slice(0,5).map(s=>({id:'slide-'+s.slug,image_url:s.cover,caption:s.title,sub:'',sort_order:0}));
     }
 }
 
@@ -512,7 +519,7 @@ el.querySelectorAll('[data-album-edit]').forEach(b=>b.addEventListener('click',(
 el.querySelectorAll('[data-album-cover]').forEach(b=>b.addEventListener('click',()=>openCldUpload(async url=>{SHOOTS=SHOOTS.map(s=>s.slug===b.dataset.albumCover?{...s,cover:url}:s);const updated=shootBySlug(b.dataset.albumCover);if(updated)await saveShootToSupabase(updated);await refreshSite();renderAdminAlbumList();showAdminMsg('ok','封面已更新')})));
 el.querySelectorAll('[data-album-del]').forEach(b=>b.addEventListener('click',async()=>{if(!confirm(t('confirmDel')))return;await deleteShootFromSupabase(b.dataset.albumDel);SHOOTS=SHOOTS.filter(s=>s.slug!==b.dataset.albumDel);refreshSite();renderAdminAlbumList();fillAdminAlbumSelect();showAdminMsg('ok','相册已删除')}))}
 
-async function addPendingPhotoToAlbum(){if(!adminPendingPhotoUrl){showAdminMsg('err','请先上传照片');return}const target=document.getElementById('adminPhotoAlbum').value;if(target==='__new__'){const title=document.getElementById('adminNewAlbumTitle').value.trim()||'Untitled';const date=document.getElementById('adminNewAlbumDate').value||new Date().toISOString().slice(0,10);const d=new Date(date);const slug=slugifyTitle(title);const row=normalizeShoot({id:slug,slug,title,date,year:d.getFullYear(),month:d.getMonth()+1,description:'',people:[],equipment:'',drive:'',cover:adminPendingPhotoUrl,galleryImages:[adminPendingPhotoUrl]});SHOOTS=[row,...SHOOTS]}else{SHOOTS=SHOOTS.map(s=>s.slug===target?{...s,galleryImages:[...(s.galleryImages||[]),adminPendingPhotoUrl]}:s)}await saveShoots();refreshSite();fillAdminAlbumSelect();renderAdminAlbumList();resetAdminUpload();document.getElementById('adminNewAlbumTitle').value='';showAdminMsg('ok','照片已添加')}
+async function addPendingPhotoToAlbum(){if(!adminPendingPhotoUrl){showAdminMsg('err','请先上传照片');return}const target=document.getElementById('adminPhotoAlbum').value;if(target==='__new__'){const title=document.getElementById('adminNewAlbumTitle').value.trim()||'Untitled';const date=document.getElementById('adminNewAlbumDate').value||new Date().toISOString().slice(0,10);const d=new Date(date);const slug=slugifyTitle(title);const row=normalizeShoot({id:slug,slug,title,date,year:d.getFullYear(),month:d.getMonth()+1,description:'',people:[],equipment:'',drive:'',cover:adminPendingPhotoUrl,galleryImages:[adminPendingPhotoUrl]});SHOOTS=[row,...SHOOTS];await saveShootToSupabase(row)}else{SHOOTS=SHOOTS.map(s=>s.slug===target?{...s,galleryImages:[...(s.galleryImages||[]),adminPendingPhotoUrl]}:s);const updated=shootBySlug(target);if(updated)await saveShootToSupabase(updated)}await refreshSite();fillAdminAlbumSelect();renderAdminAlbumList();resetAdminUpload();document.getElementById('adminNewAlbumTitle').value='';showAdminMsg('ok','照片已添加')}
 
 /* ADMIN */
 function renderAdmin(){if(!currentUser){app.innerHTML='<div class="empty page-enter" style="padding-top:140px"><p>'+t('pleaseLogin')+'</p></div>';return}if(!isAdmin){app.innerHTML='<div class="empty page-enter" style="padding-top:140px"><p>'+t('noPermission')+'</p></div>';return}renderHome();setTimeout(openAdminCenter,0)}
@@ -553,8 +560,9 @@ function openSlideEdit(idx){
     +'</div></div>';
     document.body.appendChild(overlay);
     let currentImgUrl=s?s.image_url:'';
-    overlay.querySelector('#slideImgArea').addEventListener('click',()=>openCldUpload(url=>{currentImgUrl=url;overlay.querySelector('#slideImgPreview').src=url;overlay.querySelector('#slideImgPreview').style.display='block';overlay.querySelector('#slideImgEmpty').style.display='none';overlay.querySelector('#slideUrlInput').value=url}));
-    overlay.querySelector('#slideUploadBtn').addEventListener('click',()=>openCldUpload(url=>{currentImgUrl=url;overlay.querySelector('#slideImgPreview').src=url;overlay.querySelector('#slideImgPreview').style.display='block';overlay.querySelector('#slideImgEmpty').style.display='none';overlay.querySelector('#slideUrlInput').value=url}));
+    function _applySlideImg(url){currentImgUrl=url;overlay.querySelector('#slideImgPreview').src=url;overlay.querySelector('#slideImgPreview').style.display='block';overlay.querySelector('#slideImgEmpty').style.display='none';overlay.querySelector('#slideUrlInput').value=url;}
+    overlay.querySelector('#slideImgArea').addEventListener('click',e=>{if(e.target.closest('#slideUploadBtn')||e.target.closest('#slideUrlToggle'))return;openCldUpload(url=>_applySlideImg(url));});
+    overlay.querySelector('#slideUploadBtn').addEventListener('click',e=>{e.stopPropagation();openCldUpload(url=>_applySlideImg(url));});
     overlay.querySelector('#slideUrlToggle').addEventListener('click',()=>{const g=overlay.querySelector('#slideUrlGroup');g.style.display=g.style.display==='none'?'block':'none'});
     overlay.querySelector('#slideUrlInput').addEventListener('input',function(){currentImgUrl=this.value;overlay.querySelector('#slideImgPreview').src=this.value;overlay.querySelector('#slideImgPreview').style.display=this.value?'block':'none';overlay.querySelector('#slideImgEmpty').style.display=this.value?'none':'flex'});
     overlay.querySelector('#slideCancelBtn').addEventListener('click',()=>overlay.remove());
@@ -566,7 +574,7 @@ function openSlideEdit(idx){
         if(idx!==null)HOME_SLIDES[idx]={...HOME_SLIDES[idx],image_url:cldFull(imgUrl),caption,sub};
         else HOME_SLIDES.push({id:'slide-'+Date.now(),image_url:cldFull(imgUrl),caption,sub,sort_order:HOME_SLIDES.length});
         await saveSlideOrder();
-        overlay.remove();renderHomeSlidesAdmin();router();
+        overlay.remove();renderHomeSlidesAdmin();renderNaSlidesBody();router();
     });
     overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove()});
 }
