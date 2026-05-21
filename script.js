@@ -1,6 +1,6 @@
 const CLOUD_NAME='das8chiyz';
 const UPLOAD_PRESET='photowebsite';
-const UPLOAD_PRESET_GALLERY='photowebsite-gallery';
+const UPLOAD_PRESET_GALLERY='photowebsitegallery';
 const ADMIN_EMAILS=['greencucumbertube@gmail.com'];
 const STORAGE_KEYS={shoots:'photo_gallery_shoots',slides:'photo_gallery_home_slides',users:'photo_gallery_users',session:'photo_gallery_session'};
 
