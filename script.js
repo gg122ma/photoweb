@@ -349,12 +349,21 @@ async function loadSlidesFromSupabase(){
 }
 
 async function saveSlidesToSupabase(){
-    // Delete all, then re-insert with updated sort_order
+    // 1. 先从 Supabase 拿现有 id 列表
+    let existingIds=[];
     try{
-        await sbDelete('home_slides','id=neq.___none___');
-    }catch(e){/* ignore if table empty */}
+        const rows=await sbGet('home_slides','select=id');
+        existingIds=rows.map(r=>String(r.id));
+    }catch(e){}
+    // 2. Upsert 当前所有 slides（含 sort_order）
     if(HOME_SLIDES.length){
         await sbUpsert('home_slides',HOME_SLIDES.map(slideToSbRow));
+    }
+    // 3. 删除已不在 HOME_SLIDES 里的旧行
+    const currentIds=new Set(HOME_SLIDES.map(s=>String(s.id)));
+    const toDelete=existingIds.filter(id=>!currentIds.has(id));
+    for(const id of toDelete){
+        await sbDelete('home_slides','id=eq.'+encodeURIComponent(id));
     }
 }
 
@@ -519,10 +528,10 @@ function renderHomeSlidesAdmin(){
     if(!HOME_SLIDES.length){el.innerHTML='<div style="font-size:.75rem;color:var(--text-dim);font-family:\'DM Mono\',monospace">暂无幻灯片，点击下方按钮添加</div>';return}
     el.innerHTML=HOME_SLIDES.map((s,i)=>'<div style="display:flex;align-items:center;gap:1rem;padding:.8rem;background:var(--surface);border:1px solid var(--border);border-radius:12px"><img src="'+s.image_url+'" style="width:100px;height:60px;object-fit:cover;border-radius:6px;flex-shrink:0"><div style="flex:1;min-width:0"><div style="font-size:.85rem;color:var(--text-primary);margin-bottom:.3rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(s.caption||'(无标题)')+'</div><div style="font-size:.7rem;color:var(--text-dim);font-family:\'DM Mono\',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(s.sub||'')+'</div></div><div style="display:flex;gap:.5rem;flex-shrink:0">'+(i>0?'<button class="act-btn" data-slidemove="up" data-idx="'+i+'">↑</button>':'')+(i<HOME_SLIDES.length-1?'<button class="act-btn" data-slidemove="down" data-idx="'+i+'">↓</button>':'')+'<button class="act-btn" data-slideedit="'+i+'">编辑</button><button class="act-btn del" data-slidedel="'+i+'">删除</button></div></div>').join('');
     el.querySelectorAll('[data-slideedit]').forEach(b=>b.addEventListener('click',()=>openSlideEdit(+b.dataset.slideedit)));
-    el.querySelectorAll('[data-slidedel]').forEach(b=>b.addEventListener('click',()=>{const idx=+b.dataset.slidedel;if(!confirm('确认删除该幻灯片？'))return;HOME_SLIDES.splice(idx,1);saveHomeSlides();renderHomeSlidesAdmin()}));
-    el.querySelectorAll('[data-slidemove]').forEach(b=>b.addEventListener('click',()=>{const idx=+b.dataset.idx,dir=b.dataset.slidemove,swapIdx=dir==='up'?idx-1:idx+1;[HOME_SLIDES[idx],HOME_SLIDES[swapIdx]]=[HOME_SLIDES[swapIdx],HOME_SLIDES[idx]];saveSlideOrder();renderHomeSlidesAdmin()}));
+    el.querySelectorAll('[data-slidedel]').forEach(b=>b.addEventListener('click',async()=>{const idx=+b.dataset.slidedel;if(!confirm('确认删除该幻灯片？'))return;HOME_SLIDES.splice(idx,1);await saveHomeSlides();renderHomeSlidesAdmin();router()}));
+    el.querySelectorAll('[data-slidemove]').forEach(b=>b.addEventListener('click',async()=>{const idx=+b.dataset.idx,dir=b.dataset.slidemove,swapIdx=dir==='up'?idx-1:idx+1;[HOME_SLIDES[idx],HOME_SLIDES[swapIdx]]=[HOME_SLIDES[swapIdx],HOME_SLIDES[idx]];await saveSlideOrder();renderHomeSlidesAdmin();router()}));
 }
-function saveSlideOrder(){HOME_SLIDES=HOME_SLIDES.map((s,i)=>({...s,sort_order:i}));saveHomeSlides()}
+async function saveSlideOrder(){HOME_SLIDES=HOME_SLIDES.map((s,i)=>({...s,sort_order:i}));await saveHomeSlides();}
 function openSlideEdit(idx){
     const s=idx!==null?HOME_SLIDES[idx]:null;
     const overlay=document.createElement('div');
@@ -777,8 +786,8 @@ function renderNaSlidesBody(){
     if(!HOME_SLIDES.length){el.innerHTML='<div style="font-family:DM Mono,monospace;font-size:.72rem;color:var(--text-dim);padding:2rem;text-align:center">暂无幻灯片，点击右上方按钮添加</div>';return}
     el.innerHTML=HOME_SLIDES.map((s,i)=>'<div class="na-slide-row"><img src="'+s.image_url+'" alt=""><div class="na-slide-row-info"><div class="na-slide-row-caption">'+(s.caption||'(无标题)')+'</div><div class="na-slide-row-sub">'+(s.sub||'—')+'</div></div><div class="na-slide-row-actions">'+(i>0?'<button data-smove="up" data-idx="'+i+'"><svg viewBox="0 0 24 24"><polyline points="18 15 12 9 6 15"/></svg></button>':'')+(i<HOME_SLIDES.length-1?'<button data-smove="down" data-idx="'+i+'"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></button>':'')+'<button data-sedit="'+i+'"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></button><button class="del" data-sdel="'+i+'"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg></button></div></div>').join('');
     el.querySelectorAll('[data-sedit]').forEach(b=>b.addEventListener('click',()=>openSlideEdit(+b.dataset.sedit)));
-    el.querySelectorAll('[data-sdel]').forEach(b=>b.addEventListener('click',()=>{if(!confirm('确认删除该幻灯片？'))return;HOME_SLIDES.splice(+b.dataset.sdel,1);saveHomeSlides();renderNaSlidesBody();router()}));
-    el.querySelectorAll('[data-smove]').forEach(b=>b.addEventListener('click',()=>{const idx=+b.dataset.idx,dir=b.dataset.smove,si=dir==='up'?idx-1:idx+1;[HOME_SLIDES[idx],HOME_SLIDES[si]]=[HOME_SLIDES[si],HOME_SLIDES[idx]];saveSlideOrder();renderNaSlidesBody();loadSlidesFromSupabase().then(()=>router())}));
+    el.querySelectorAll('[data-sdel]').forEach(b=>b.addEventListener('click',async()=>{if(!confirm('确认删除该幻灯片？'))return;HOME_SLIDES.splice(+b.dataset.sdel,1);await saveHomeSlides();renderNaSlidesBody();router()}));
+    el.querySelectorAll('[data-smove]').forEach(b=>b.addEventListener('click',async()=>{const idx=+b.dataset.idx,dir=b.dataset.smove,si=dir==='up'?idx-1:idx+1;[HOME_SLIDES[idx],HOME_SLIDES[si]]=[HOME_SLIDES[si],HOME_SLIDES[idx]];await saveSlideOrder();renderNaSlidesBody();router()}));
 }
 document.getElementById('naNewSlide').addEventListener('click',()=>openSlideEdit(null));
 
