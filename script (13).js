@@ -816,3 +816,53 @@ document.getElementById('adminFab').addEventListener('click',()=>{if(isAdmin)ope
 /* INIT */
 checkSession();
 refreshSite();
+
+/* ── 高级光圈鼠标跟随特效 ────────────────────────────────────────── */
+(function initCursorHalo() {
+    // 创建光圈 DOM 元素
+    const halo = document.createElement('div');
+    halo.className = 'cursor-halo';
+    document.body.appendChild(halo);
+
+    let mouseX = window.innerWidth / 2;
+    let mouseY = window.innerHeight / 2;
+    let haloX = mouseX;
+    let haloY = mouseY;
+
+    // 监听鼠标移动
+    document.addEventListener('mousemove', e => {
+        mouseX = e.clientX;
+        mouseY = e.clientY;
+    });
+
+    // 平滑跟随动画算法
+    function renderHalo() {
+        // 0.12 是跟随的粘滞度/平滑度，越小越柔和延迟
+        haloX += (mouseX - haloX) * 0.12;
+        haloY += (mouseY - haloY) * 0.12;
+        
+        halo.style.transform = `translate(calc(${haloX}px - 50%), calc(${haloY}px - 50%))`;
+        requestAnimationFrame(renderHalo);
+    }
+    requestAnimationFrame(renderHalo);
+
+    // 监听可交互元素的悬停，使光圈产生“聚焦”效果
+    const interactiveSelectors = 'a, button, .gal-photo-card, .det-gal-item, .nav-brand, input, textarea, .nav-dd';
+    
+    document.addEventListener('mouseover', e => {
+        if (e.target.closest(interactiveSelectors)) {
+            document.body.classList.add('hovering-element');
+        }
+    });
+
+    document.addEventListener('mouseout', e => {
+        if (e.target.closest(interactiveSelectors)) {
+            document.body.classList.remove('hovering-element');
+        }
+    });
+
+    // 移动端/触摸屏自动隐藏光圈
+    document.addEventListener('touchstart', () => {
+        halo.style.display = 'none';
+    }, { passive: true });
+})();
