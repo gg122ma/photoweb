@@ -1,5 +1,6 @@
 const CLOUD_NAME='das8chiyz';
 const UPLOAD_PRESET='photowebsite';
+const UPLOAD_PRESET_GALLERY='photowebsite-gallery';
 const ADMIN_EMAILS=['greencucumbertube@gmail.com'];
 const STORAGE_KEYS={shoots:'photo_gallery_shoots',slides:'photo_gallery_home_slides',users:'photo_gallery_users',session:'photo_gallery_session'};
 
@@ -181,14 +182,9 @@ function openCldUpload(cb, opts={}) {
             try {
                 const fd = new FormData();
                 fd.append('file', file);
-                fd.append('upload_preset', UPLOAD_PRESET);
+                // Gallery photos use a separate preset with Incoming Transformation for real compression
+                fd.append('upload_preset', opts.compress ? UPLOAD_PRESET_GALLERY : UPLOAD_PRESET);
                 fd.append('folder', 'gallery');
-                // For gallery photos: request an eager compressed version at upload time
-                // so Cloudinary stores the smaller file and returns its URL directly
-                if (opts.compress) {
-                    fd.append('eager', 'f_auto,q_auto,w_1200');
-                    fd.append('eager_async', 'false');
-                }
                 const res = await fetch(
                     'https://api.cloudinary.com/v1_1/' + CLOUD_NAME + '/image/upload',
                     { method: 'POST', body: fd }
@@ -196,13 +192,7 @@ function openCldUpload(cb, opts={}) {
                 if (!res.ok) throw new Error('Upload failed: ' + res.status);
                 const data = await res.json();
                 if (data.secure_url) {
-                    // For gallery photos: use the eager (compressed) URL,
-                    // otherwise fall back to the original URL
-                    let finalUrl = data.secure_url;
-                    if (opts.compress && data.eager && data.eager[0] && data.eager[0].secure_url) {
-                        finalUrl = data.eager[0].secure_url;
-                    }
-                    cb(finalUrl, data);
+                    cb(data.secure_url, data);
                 }
             } catch (e) {
                 console.error('Cloudinary upload error:', e);
